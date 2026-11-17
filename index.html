@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>CAST</title>
+<meta name="description" content="CAST: hold to charge, hook, and reel them in.">
+<meta name="theme-color" content="#031428">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 8 8%22 shape-rendering=%22crispEdges%22%3E%3Crect width=%228%22 height=%228%22 fill=%22%23031428%22/%3E%3Crect x=%223%22 y=%221%22 width=%222%22 height=%222%22 fill=%22%23e8f0f4%22/%3E%3Crect x=%223%22 y=%223%22 width=%222%22 height=%222%22 fill=%22%23d04030%22/%3E%3Crect x=%223%22 y=%225%22 width=%222%22 height=%222%22 fill=%22%23e8f0f4%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud">
+  <div class="stat money"><small>CASH</small><b id="money">$0</b></div>
+  <div class="stat"><small>WATER</small><b id="water">THE SEA</b></div>
+  <div class="stat time" id="time-stat"><small>TIME</small><b id="tod">DAY</b></div>
+  <div class="stat"><small>CAUGHT</small><b id="caught">0</b></div>
+</div>
+
+<nav id="dock">
+  <button data-panel="creel">CREEL</button>
+  <button data-panel="shop">SHOP</button>
+  <button data-panel="log">LOG</button>
+  <button data-panel="map">WATERS</button>
+</nav>
+
+<div id="panels">
+  <section class="panel" id="p-creel"></section>
+  <section class="panel" id="p-shop"></section>
+  <section class="panel" id="p-log"></section>
+  <section class="panel" id="p-map"></section>
+  <section class="panel" id="p-admin" aria-label="Admin panel"></section>
+</div>
+
+<div id="hint"></div>
+<div id="toast"></div>
+<div id="catch" class="catch" hidden></div>
+<div id="fight-ui" hidden>
+  <div class="f-prog"><i id="f-prog"></i></div>
+  <div class="f-bar" id="f-bar"><i class="zone" id="f-zone"></i><b class="mark" id="f-mark"></b></div>
+  <div class="f-ten"><small>LINE</small><i id="f-ten"></i></div>
+  <p class="f-tip" id="f-tip">KEEP THE HOOK IN THE ZONE</p>
+</div>
+<div id="power"><i id="power-fill"></i></div>
+
+<div id="title">
+  <h1 id="logo"><canvas id="logo-cv" width="67" height="20" aria-label="CAST"></canvas></h1>
+  <p class="tag">hold to charge. hook. reel them in.</p>
+  <div class="btns"><button id="play">CAST OFF</button><button id="newg" hidden>NEW GAME</button></div>
+</div>
+
+<div id="howto"><div class="card">
+  <h2>HOW TO PLAY</h2>
+  <ol>
+    <li><b>Hold</b> anywhere on the water to charge a cast, then <b>release</b>. Longer holds land farther out, where rarer fish feed.</li>
+    <li>Watch the bobber. When it plunges, <b>tap</b> to hook the fish.</li>
+    <li><b>Drag</b> (or use the arrows) to keep the hook inside the moving zone. Stay in to land it. Leave it too long and the line snaps.</li>
+    <li>Sell fish from the <b>CREEL</b>. Spend the coins in the <b>SHOP</b> on your rod, line, bait and boat.</li>
+    <li>Fill the <b>LOG</b>. A better boat unlocks new waters, and the time of day changes what bites.</li>
+  </ol>
+  <button id="gotit">START FISHING</button>
+</div></div>
+
+<script src="js/data.js?v=2"></script>
+<script src="js/art.js?v=2"></script>
+<script src="js/scene.js?v=2"></script>
+<script src="js/game.js?v=2"></script>
+<script src="js/ui.js?v=2"></script>
+<script src="js/admin.js?v=2"></script>
+<script src="js/main.js?v=2"></script>
+</body>
+</html>
