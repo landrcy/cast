@@ -50,73 +50,6 @@ function bodyMask(kind, x,y,w,h){
   return {nx, ny, d, cx, cy};
 }
 
-function paintFish(f, opts){
-  opts=opts||{};
-  const W=opts.w||48, H=opts.h||28, flip=!!opts.flip, sil=!!opts.sil, sc=opts.scale||1;
-  const s=mk(W*sc, H*sc);
-  const pal=f.art.pal, a=f.art;
-  const col=sil? ['#0a1520','#0a1520','#0a1520','#0a1520','#0a1520','#000000','#0a1520'] : pal;
-  const face = flip?1:-1; // drawn facing right by default; flip mirrors x
-  const SX=x=> (flip? (W-1-x):x)*sc;
-  const SY=y=> y*sc;
-  const pxl=(x,y,c)=>{ for(let j=0;j<sc;j++) for(let i=0;i<sc;i++) P(s,SX(x)+i,SY(y)+j,c); };
-
-  // tail
-  const tcx=6, tcy=Math.floor(H*0.52);
-  drawTail(pxl, a.tail, tcx, tcy, col, a.body==='eel'||a.body==='long');
-
-  // dorsal / anal
-  if(a.dor && a.dor!=='none'){
-    const dx=Math.floor(W*0.48), dy=Math.floor(H*0.22);
-    drawDorsal(pxl, a.dor, dx, dy, col, a.extra==='sail');
-    // anal fin
-    for(let i=0;i<5;i++) pxl(dx-1+i, H-8+(i%2), i<2?col[1]:col[2]);
-  }
-
-  // pec fin
-  for(let i=0;i<6;i++) for(let j=0;j<3;j++){
-    if(j>1 && i>4) continue;
-    pxl(Math.floor(W*0.52)+j, Math.floor(H*0.58)+i-2, j===0?col[4]:col[2]);
-  }
-
-  // body
-  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
-    const m=bodyMask(a.body,x,y,W,H);
-    if(!m) continue;
-    // light from top-left, 4 hard bands
-    const light = -m.nx*0.25 - m.ny*0.7 + 0.15;
-    let band = light>0.45?3: light>0.12?2: light>-0.25?1:0;
-    // belly
-    if(m.ny>0.35) band=Math.max(band, m.ny>0.6?6:2);
-    let c = col[band]||col[1];
-    if(m.ny>0.55 && col[6]) c= mixBand(col[6], c, 0.35);
-
-    if(!sil) c=patternColor(a.pat, pal, c, m, x, y, W, H, f);
-    // rim shade
-    if(m.d>0.82) c=col[0];
-    pxl(x,y,c);
-  }
-
-  // extras that sit on the body
-  if(!sil) drawExtras(pxl, a.extra, W, H, pal, f, 0);
-
-  // eye
-  const ex=Math.floor(W*0.72), ey=Math.floor(H*0.42);
-  pxl(ex,ey, sil?col[0]:'#f4f4f0');
-  pxl(ex+1,ey, sil?col[0]:'#f4f4f0');
-  pxl(ex,ey+1, sil?col[0]:(pal[5]||'#081018'));
-  pxl(ex+1,ey+1, sil?col[0]:(pal[5]||'#081018'));
-  if(!sil) pxl(ex,ey, '#ffffff');
-
-  // gill line
-  pxl(Math.floor(W*0.64), Math.floor(H*0.46), col[0]);
-  pxl(Math.floor(W*0.64), Math.floor(H*0.50), col[0]);
-  pxl(Math.floor(W*0.64), Math.floor(H*0.54), col[0]);
-
-  outlineSprite(s, sil?'#050a10':'#0a0810');
-  return s.c;
-}
-
 function mixBand(a,b,t){ // snap to nearer color rather than blending (keeps hard bands)
   return t<0.5?a:b;
 }
@@ -274,16 +207,6 @@ function drawExtras(pxl, extra, W, H, pal, f, frame){
   }
 }
 
-const FISH_SPR={}, FISH_SIL={}, FISH_BIG={};
-function fishSpr(f, sil){
-  const k=f.id+(sil?'/s':'');
-  const cache=sil?FISH_SIL:FISH_SPR;
-  return cache[k]||(cache[k]=paintFish(f,{w:48,h:28,sil:!!sil}));
-}
-function fishBig(f){
-  return FISH_BIG[f.id]||(FISH_BIG[f.id]=paintFish(f,{w:64,h:38,scale:1}));
-}
-
 // —— bobber (red / white, classic) ——
 function drawBobber(s, x, y, sc, under){
   // sc is pixel size of the bobber (2-6)
@@ -305,77 +228,94 @@ function drawBobber(s, x, y, sc, under){
 }
 
 // —— first-person hands + rod ——
-// Drawn into the scene buffer in pixel space. pose: 'idle'|'charge'|'cast'|'fight'
+// Framed above the UI. The rod recedes INTO the scene toward the dock end, not across the screen.
 function drawHands(s, pose, power, bend, tipOut){
   const W=s.w, H=s.h;
   const g=s.g;
-  // skin / sleeve / wood palettes (hard bands)
   const SK=['#5a2e1c','#8a4a28','#c47848','#e8b080'];
   const SL=['#1a2a38','#2a4058','#4a6880'];
   const rod=(typeof G!=='undefined' && typeof rodByLevel==='function') ? rodByLevel(G.up.rod) : null;
   const WD=rod? rod.shaft : ['#3a2410','#5a3820','#8a5a30','#c4a06a'];
   const MT=['#2a3038','#5a6870','#a0b0b8'];
   const AC=rod? rod.accent : '#c4a06a';
+  const pad= (typeof Scene!=='undefined' && Scene.uiPad) ? Scene.uiPad : 0;
+  const ground=H-pad-1;
+  const dockY=(typeof Scene!=='undefined' && Scene.dockY) ? Scene.dockY : Math.floor(H*0.70);
 
-  // right forearm + hand (rod hand) sits lower-right; left hand lower-center
-  const baseY=H-1;
-  // left hand (fore)
-  const lx=Math.floor(W*0.34);
-  const ly=baseY-8;
-  // fingers
-  [[0,0,6,5],[7,1,4,4],[11,2,3,3],[14,3,3,3]].forEach(([x,y,w,h],i)=>{
-    R(s,lx+x,ly+y,w,h,SK[i===0?1:2]);
-    P(s,lx+x,ly+y,SK[3]);
-    R(s,lx+x,ly+y+h-1,w,1,SK[0]);
+  // left hand, larger, sitting just above the UI
+  const lx=Math.floor(W*0.30), ly=ground-20;
+  // forearm / sleeve coming up from the bottom
+  R(s, lx-10, ly+2, 12, ground-(ly+2)+1, SL[1]);
+  R(s, lx-10, ly+2, 12, 3, SL[2]);
+  R(s, lx-10, ground-2, 12, 3, SL[0]);
+  // palm
+  R(s, lx-2, ly, 16, 12, SK[2]);
+  R(s, lx-2, ly, 16, 3, SK[3]);
+  R(s, lx-2, ly+9, 16, 3, SK[1]);
+  // fingers toward the center, slightly curled
+  [[14,1,7,5],[20,3,6,4],[25,5,5,4],[29,7,4,3]].forEach(([x,y,w,h],i)=>{
+    R(s, lx+x, ly+y, w, h, SK[i===0?2:2]);
+    P(s, lx+x, ly+y, SK[3]);
+    R(s, lx+x, ly+y+h-1, w, 1, SK[0]);
   });
-  // sleeve cuff
-  R(s,lx-6,ly+1,7,7,SL[1]); R(s,lx-6,ly+1,7,2,SL[2]); R(s,lx-6,ly+6,7,2,SL[0]);
+  // thumb
+  R(s, lx+8, ly-3, 5, 5, SK[2]); P(s, lx+8, ly-3, SK[3]);
 
-  // right hand + rod
-  const charge = pose==='charge'? power : 0;
-  const swing  = pose==='cast'? power : 0; // 0 just released .. 1 follow-through
-  // rod angle in "pixels up/right"
-  let ang;
-  if(pose==='charge') ang = -0.15 - charge*0.85;          // pulled back over the shoulder
-  else if(pose==='cast') ang = -1.0 + swing*1.55;         // swing forward
-  else if(pose==='fight') ang = -0.55 - (bend||0)*0.45;   // bent toward the fish
-  else ang = -0.62;                                       // idle, tipped toward the water
+  // right hand + reel, slightly right of center
+  const hx=Math.floor(W*0.58), hy=ground-18;
+  R(s, hx+4, hy+4, 14, ground-(hy+4)+1, SL[1]);
+  R(s, hx+4, hy+4, 14, 3, SL[2]);
+  R(s, hx+4, ground-2, 14, 3, SL[0]);
+  // fist around the grip
+  R(s, hx-4, hy, 14, 12, SK[2]);
+  R(s, hx-4, hy, 14, 3, SK[3]);
+  R(s, hx-4, hy+9, 14, 3, SK[1]);
+  R(s, hx+8, hy-2, 6, 6, SK[2]); // thumb over the rod
+  P(s, hx+8, hy-2, SK[3]);
 
-  const hx=Math.floor(W*0.62), hy=baseY-10;
-  // grip
-  R(s,hx-2,hy,8,6,SK[2]); R(s,hx-2,hy,8,2,SK[3]); R(s,hx-1,hy+5,6,2,SK[1]);
-  R(s,hx+6,hy+1,4,4,SK[2]); // thumb
-  R(s,hx-8,hy+1,7,7,SL[1]); R(s,hx-8,hy+1,7,2,SL[2]);
+  // reel, bigger and fully on-screen
+  const rx=hx-2, ry=hy+8;
+  R(s, rx, ry, 9, 9, MT[1]);
+  R(s, rx+1, ry+1, 7, 7, MT[0]);
+  P(s, rx+4, ry+4, MT[2]);
+  R(s, rx+8, ry+2, 3, 3, MT[2]);
+  if(rod && rod.accent) P(s, rx+4, ry+3, rod.accent);
 
-  // rod as a stepped pixel line from the grip toward the water
-  const len=Math.floor(H*0.62);
-  const tipWant = tipOut; // {x,y} if the line is out, bias the tip that way a little
-  let dx=Math.cos(ang), dy=Math.sin(ang);
-  if(tipWant && pose!=='charge' && pose!=='cast'){
-    const vx=tipWant.x-(hx+2), vy=tipWant.y-(hy);
-    const m=Math.hypot(vx,vy)||1;
-    dx=lerp(dx, vx/m, 0.65); dy=lerp(dy, vy/m, 0.65);
-    const mm=Math.hypot(dx,dy)||1; dx/=mm; dy/=mm;
+  // rod recedes toward the far dock, tapering (into the scene)
+  // grip is at (hx+2, hy-1). Idle tip sits just past the dock end, slightly right of center.
+  let tipTarget={x:Math.floor(W*0.54), y:dockY-6};
+  if(pose==='charge'){
+    const p=power||0;
+    tipTarget={x:Math.floor(lerp(W*0.54, W*0.78, p)), y:Math.floor(lerp(dockY-6, ground-28, p))};
+  } else if(pose==='cast'){
+    const p=power||0;
+    tipTarget={x:Math.floor(lerp(W*0.78, W*0.52, p)), y:Math.floor(lerp(ground-28, dockY-18, p))};
+  } else if((pose==='fight'||pose==='idle') && tipOut){
+    // only ease the TIP toward the bobber; keep the grip planted so the rod doesn't slash the frame
+    tipTarget={x:Math.round(lerp(tipTarget.x, tipOut.x, 0.55)), y:Math.round(lerp(tipTarget.y, tipOut.y, 0.45))};
+    // clamp so the rod stays mostly over the dock / near water
+    tipTarget.y=Math.max(dockY-28, Math.min(tipTarget.y, ground-24));
   }
-  let x=hx+3, y=hy-1;
-  let tip={x:x, y:y};
-  for(let i=0;i<len;i++){
-    x+=dx; y+=dy;
-    // slight bend toward the fish during a fight
-    if(pose==='fight' && bend){ dy += bend*0.012; const m=Math.hypot(dx,dy)||1; dx/=m; dy/=m; }
-    const ix=Math.round(x), iy=Math.round(y);
-    if(iy<0||ix<0||ix>=W) break;
-    const thick = i<8?2:1;
-    const c = i<10?WD[1]: i<14?MT[1]: WD[i%5===0?3:2];
-    R(s,ix,iy,thick,1,c);
-    if(i<8) P(s,ix,iy,WD[3]);
-    // line guides
-    if(i===12||i===22||i===34){ P(s,ix,iy-1,MT[2]); P(s,ix+1,iy,MT[1]); }
-    tip={x:ix,y:iy};
-    if(iy < Math.floor(H*0.42)) break;
+  const gx=hx+2, gy=hy-1;
+  const n=Math.max(8, Math.hypot(tipTarget.x-gx, tipTarget.y-gy)|0);
+  let tip={x:gx,y:gy};
+  for(let i=0;i<=n;i++){
+    const u=i/n;
+    // slight fight bend
+    const bendAmt=(pose==='fight'?(bend||0):0)*Math.sin(u*Math.PI)*10;
+    const x=Math.round(gx+(tipTarget.x-gx)*u + bendAmt);
+    const y=Math.round(gy+(tipTarget.y-gy)*u);
+    const thick = u<0.12?4: u<0.28?3: u<0.6?2:1;
+    const c= u<0.15?WD[1]: u<0.2?MT[1]: WD[u>0.85?3:2];
+    R(s, x-Math.floor((thick-1)/2), y, thick, 1, c);
+    if(thick>1) P(s, x-Math.floor((thick-1)/2), y, WD[3]);
+    if(Math.abs(u-0.22)<0.01||Math.abs(u-0.4)<0.01||Math.abs(u-0.62)<0.01){
+      P(s, x-2, y, AC); P(s, x+1, y, MT[2]);
+    }
+    tip={x,y};
   }
-  // reel on the rod butt
-  R(s,hx+1,hy+4,5,5,MT[1]); P(s,hx+2,hy+5,MT[2]); P(s,hx+3,hy+6,MT[0]); R(s,hx+5,hy+5,2,2,MT[2]);
+  // grip wrap over the fist
+  R(s, gx-1, gy, 4, 3, WD[0]);
 
   return tip;
 }
@@ -432,117 +372,6 @@ function buildArt(){
   ART.ready=true;
 }
 
-
-// —— named rods (vertical display sprite, handle at the bottom) ——
-const ROD_SPR = {};
-function paintRod(rod, opts){
-  opts=opts||{};
-  const W=opts.w||32, H=opts.h||112;
-  const s=mk(W,H);
-  const sh=rod.shaft, hd=rod.handle, ac=rod.accent;
-  const cx=Math.floor(W/2);
-  // handle
-  const hy=H-18, hh=16, hw=rod.reel==='none'?6:7;
-  for(let y=0;y<hh;y++){
-    const c = y<2||y>hh-3? hd[0] : (y%5===0? hd[0]:hd[1]);
-    R(s, cx-Math.floor(hw/2), hy+y, hw, 1, c);
-    if(y>1 && y<hh-2) P(s, cx-Math.floor(hw/2), hy+y, rod.handle[1]||hd[1]);
-    P(s, cx+Math.floor(hw/2)-1, hy+y, hd[0]);
-  }
-  // cork / wrap rings on the handle
-  if(rod.wrap){
-    for(let k=0;k<3;k++) R(s, cx-Math.floor(hw/2), hy+3+k*4, hw, 1, rod.wrap);
-  } else {
-    // twine on driftwood
-    for(let k=0;k<4;k++) P(s, cx-2+(k%3), hy+2+k*3, '#6a4a28');
-  }
-  // reel
-  if(rod.reel && rod.reel!=='none'){
-    const pal={
-      cork:['#6a4a20','#b08a50','#e0c080'],
-      brass:['#6a4a10','#c4a060','#f0e0a0'],
-      silver:['#3a4a50','#8aa0b0','#e0e8f0'],
-      iron:['#1a1c20','#5a6068','#b0b8c0'],
-      gold:['#6a4a08','#e0b020','#fff0a0'],
-      dark:['#101018','#3a4a68','#8a9ab8'],
-      void:['#14001e','#8f2fd6','#5ff6ff'],
-      ember:['#4a0c00','#ff7a10','#ffe68a']
-    }[rod.reel]||['#2a3038','#5a6870','#a0b0b8'];
-    const rx=cx+Math.floor(hw/2), ry=hy+5;
-    R(s, rx, ry, 7, 7, pal[1]);
-    R(s, rx+1, ry+1, 5, 5, pal[0]);
-    P(s, rx+3, ry+3, pal[2]);
-    R(s, rx+6, ry+2, 2, 3, pal[2]); // crank
-    P(s, rx, ry, pal[2]);
-  }
-  // shaft: taper toward the tip
-  const tipY=6, baseY=hy-1;
-  for(let y=baseY; y>=tipY; y--){
-    const t=(y-tipY)/(baseY-tipY); // 1 at handle, 0 at tip
-    const thick = t>0.85?3: t>0.3?2:1;
-    // hard bands along the length + a light edge
-    const band = (Math.floor((baseY-y)/7)%2===0)?1:2;
-    let c=sh[band];
-    if(t>0.92) c=sh[0];
-    if(t<0.08) c=sh[Math.min(sh.length-1,3)];
-    // unique patterns
-    if(rod.id==='driftwood' && hash2(cx,y,3)<0.12) c=sh[0]; // knots
-    if(rod.id==='reedcane' && ((baseY-y)%6===0)) c=sh[0]; // cane joints
-    if(rod.id==='ironback' && ((baseY-y)%8===0)) c=sh[3];
-    if(rod.id==='sunline' && ((baseY-y)%10===0)) c=sh[3];
-    if(rod.id==='riftwand' && ((baseY-y)%5===0)) c=ac;
-    if(rod.id==='emberkeel' && ((baseY-y)%7===0)) c=ac;
-    if(rod.id==='abysspine' && ((baseY-y)%9===0)) c=sh[0];
-    const x0=cx-Math.floor((thick-1)/2);
-    R(s, x0, y, thick, 1, c);
-    if(thick>1) P(s, x0, y, sh[Math.min(sh.length-1,3)]); // highlight edge
-  }
-  // wrapping just above the handle
-  if(rod.wrap){
-    for(let i=0;i<5;i++) R(s, cx-2, hy-6+i, 5, 1, i%2?rod.wrap:sh[0]);
-  }
-  // line guides
-  if(rod.tip==='guides' || rod.tip==='spear' || rod.lv>=2){
-    const spots=[0.25,0.45,0.65,0.82];
-    spots.forEach(p=>{
-      const y=Math.round(lerp(tipY, baseY, p));
-      P(s, cx-2, y, ac); P(s, cx+2, y, ac); P(s, cx-2, y-1, ac);
-    });
-  }
-  // tips
-  if(rod.tip==='twine'){
-    P(s, cx, tipY-1, '#6a4a28'); P(s, cx, tipY-2, '#8a6a40');
-  } else if(rod.tip==='plain'){
-    P(s, cx, tipY-1, sh[3]);
-  } else if(rod.tip==='spear'){
-    P(s, cx, tipY-1, sh[3]); P(s, cx, tipY-2, '#e8eef0'); P(s, cx, tipY-3, '#e8eef0');
-  } else if(rod.tip==='lantern'){
-    P(s, cx, tipY-1, ac); P(s, cx-1, tipY-2, ac); P(s, cx, tipY-2, '#fff4c0'); P(s, cx+1, tipY-2, ac); P(s, cx, tipY-3, ac);
-  } else if(rod.tip==='crystal'){
-    P(s, cx, tipY-1, ac); P(s, cx, tipY-2, '#ffffff'); P(s, cx-1, tipY-2, ac); P(s, cx+1, tipY-2, ac); P(s, cx, tipY-3, ac);
-  } else if(rod.tip==='ember'){
-    P(s, cx, tipY-1, '#ff8010'); P(s, cx, tipY-2, '#ffe68a'); P(s, cx-1, tipY-1, '#e03800'); P(s, cx+1, tipY-1, '#e03800'); P(s, cx, tipY-3, '#fff4c0');
-  } else {
-    P(s, cx, tipY-1, ac);
-  }
-  // unique ornaments
-  if(rod.id==='tealcaster'){
-    // teal winding diamond
-    P(s, cx, Math.floor(H*0.45), ac); P(s, cx-1, Math.floor(H*0.45)+1, ac); P(s, cx+1, Math.floor(H*0.45)+1, ac);
-  }
-  if(rod.id==='sunline'){
-    // sun disc below the tip
-    const y=tipY+8;
-    P(s, cx-1, y, ac); P(s, cx, y-1, ac); P(s, cx, y, '#fff0a0'); P(s, cx+1, y, ac); P(s, cx, y+1, ac);
-  }
-  if(rod.id==='riftwand'){
-    const y=Math.floor(H*0.4);
-    P(s, cx, y, '#ffffff'); P(s, cx-1, y, ac); P(s, cx+1, y, ac);
-  }
-  outlineSprite(s, '#0a0810');
-  return s.c;
-}
-function rodSpr(rod){ return ROD_SPR[rod.id]||(ROD_SPR[rod.id]=paintRod(rod)); }
 
 // —— CAST wordmark (pixel letters, hook on the C, bobber on the T) ——
 function paintLogo(opts){

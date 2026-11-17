@@ -41,7 +41,7 @@ const UI = {
   closeBtn(n){ const hd=document.querySelector('#p-'+n+' header'); if(hd&&!hd.querySelector('.x')) hd.insertAdjacentHTML('beforeend','<button class="x" data-act="close" aria-label="Close panel">&times;</button>'); },
   render(){
     if(!UI.open) return;
-    ({creel:UI.rCreel, shop:UI.rShop, log:UI.rLog, map:UI.rMap, admin:ADMIN.render})[UI.open]();
+    ({creel:UI.rCreel, shop:UI.rShop, log:UI.rLog, map:UI.rMap, skills:UI.rSkills, admin:ADMIN.render})[UI.open]();
   },
   click(e){
     const b=e.target.closest('[data-act]'); if(!b) return;
@@ -53,16 +53,18 @@ const UI = {
     if(act==='go') travelTo(b.dataset.id);
     if(act==='tab'){ UI.logTab=b.dataset.tab; UI.render(); }
     if(act==='log'){ UI.logSel=b.dataset.id; UI.render(); }
+    if(act==='skill'){ UI.pickSkill(b.dataset.id); }
+    if(act==='unlock'){ UI.buySkill(b.dataset.id); }
   },
   rCreel(){
     const p=$('#p-creel');
-    let h=`<header><h2>CREEL</h2><span>${G.creel.length}/${CREEL_MAX}</span></header>`;
+    let h=`<header><h2>CREEL</h2><span>${G.creel.length}/${creelMax()}</span></header>`;
     if(!G.creel.length) h+=`<p class="hint">Nothing in the creel yet. Land a fish and it will sit here until you sell it.</p>`;
     else {
       h+=`<button class="buy wide" data-act="sellall">SELL ALL <b>${fmt(G.creel.reduce((a,it)=>a+it.val,0))}</b></button><div class="clist">`;
       G.creel.forEach((it,i)=>{
         const f=FISH_BY[it.id];
-        h+=`<div class="row"><canvas width="48" height="28" data-fish="${f.id}"></canvas><div><b>${f.name}</b><small style="color:${RAR[f.rar].c}">${RAR[f.rar].n} · ${fmtKg(it.w)}</small></div>
+        h+=`<div class="row"><canvas width="96" height="56" data-fish="${f.id}"></canvas><div><b>${f.name}</b><small style="color:${RAR[f.rar].c}">${RAR[f.rar].n} · ${fmtKg(it.w)}</small></div>
           <button class="buy" data-act="sellone" data-i="${i}">${fmt(it.val)}</button></div>`;
       });
       h+=`</div>`;
@@ -71,14 +73,17 @@ const UI = {
   },
   rShop(){
     const p=$('#p-shop');
+    const cap=rodCap();
     let h=`<header><h2>SHOP</h2><span>${fmt(G.money)}</span></header>
-      <p class="hint">A better rod casts farther and hooks longer. Line holds the fight. Bait shortens the wait and improves luck. The boat opens new waters.</p>`;
+      <p class="hint">A better rod casts farther and hooks longer. Line holds the fight. Bait shortens the wait and improves luck. Top rods and new waters unlock on the SKILLS tree.</p>`;
     Object.keys(UPG).forEach(k=>{
       const u=UPG[k], L=G.up[k], mx=L>=u.max, c=mx?0:u.cost(L);
-      const extra=k==='rod'?' · '+(rodByLevel(L).name):k==='boat'?' · '+(UPG.boat.d(L).split('·')[0].trim()):'';
+      const gated=k==='rod' && !mx && L+1>cap;
+      const extra=k==='rod'?' · '+(rodByLevel(L).name):k==='boat'?' · '+(UPG.boat.d(L)): '';
+      const note=gated?'Unlock '+rodGateName(cap)+' on the skill tree to buy the next rod.': (u.d(L)+(mx?'':' → '+u.d(L+1)));
       h+=`<div class="row"><div><b>${u.n}${extra}</b> <span class="pips">${'▮'.repeat(L)}<s>${'▮'.repeat(u.max-L)}</s></span>
-        <small>${u.d(L)}${mx?'':' → '+u.d(L+1)}</small></div>
-        <button class="buy" data-act="buy" data-k="${k}" ${mx||G.money<c?'disabled':''}>${mx?'MAX':fmt(c)}</button></div>`;
+        <small>${note}</small></div>
+        <button class="buy" data-act="buy" data-k="${k}" ${mx||gated||G.money<c?'disabled':''}>${mx?'MAX':gated?'LOCKED':fmt(c)}</button></div>`;
     });
     p.innerHTML=h; UI.closeBtn('shop');
   },
@@ -95,7 +100,7 @@ const UI = {
     list.forEach(f=>{
       const rec=G.log[f.id], on=!!rec;
       h+=`<div class="logc ${on?'on':''}" data-act="log" data-id="${f.id}" ${on?`style="border-color:${RAR[f.rar].c}"`:''}>
-        <canvas width="48" height="28" data-fish="${f.id}" data-sil="${on?0:1}"></canvas>
+        <canvas width="96" height="56" data-fish="${f.id}" data-sil="${on?0:1}"></canvas>
         <b>${on?f.name:'???'}</b>
         ${on?`<span class="n">${rec.n} · ${fmtKg(rec.best)}</span>`:''}
       </div>`;
@@ -115,15 +120,74 @@ const UI = {
   rMap(){
     const p=$('#p-map');
     let h=`<header><h2>WATERS</h2><span>${G.unlocked.length}/${WATERS.length}</span></header>
-      <p class="hint">Upgrade the boat in the shop to reach farther waters. Each one holds its own fish.</p>`;
+      <p class="hint">Unlock farther waters on the SKILLS tree, under VOYAGER. Each one holds its own fish.</p>`;
     WATERS.forEach(w=>{
-      const open=G.unlocked.includes(w.id), here=G.water===w.id, can=open || G.up.boat>=w.boat;
-      h+=`<div class="wcard ${here?'here':''} ${open?'':'locked'}" ${can?`data-act="go" data-id="${w.id}"`:''}>
+      const need=waterSkill(w.id);
+      const skillOk=!need || need==='root' || hasSkill(need);
+      const open=G.unlocked.includes(w.id) || skillOk;
+      const here=G.water===w.id;
+      const needName=need && SKILL_BY[need]?SKILL_BY[need].n:'';
+      h+=`<div class="wcard ${here?'here':''} ${open?'':'locked'}" ${open?`data-act="go" data-id="${w.id}"`:''}>
         <canvas class="wswatch" width="44" height="28" data-water="${w.id}"></canvas>
-        <div><b>${w.n}</b><i>${w.tag}${here?' · YOU ARE HERE':open?'':' · '+(G.up.boat>=w.boat?fmt(w.cost)+' TO UNLOCK':'BOAT '+(w.boat))}</i>
+        <div><b>${w.n}</b><i>${w.tag}${here?' · YOU ARE HERE':open?'':' · UNLOCK '+needName+' ON THE TREE'}</i>
         <i>${w.blurb}</i></div></div>`;
     });
     p.innerHTML=h; UI.closeBtn('map'); UI.paintWaters(p);
+  },
+  rSkills(){
+    const p=$('#p-skills');
+    const need=xpToNext(G.level||0);
+    const pct=Math.round(Math.min(1,(G.xp||0)/need)*100);
+    let h=`<header><h2>SKILLS</h2><span>LV ${G.level||0} · ${G.sp||0} SP</span></header>
+      <div class="xpbar"><i style="width:${pct}%"></i></div>
+      <div class="xplabel">${G.xp||0} / ${need} XP TO LV ${(G.level||0)+1}</div>
+      <p class="hint">Catch fish to earn XP. Each level grants a skill point. Spend points to open a branch.</p>
+      <div class="stree">`;
+    const cols=['angler','line','lure','voyage'];
+    cols.forEach(br=>{
+      const meta=BRANCH[br];
+      const nodes=SKILLS.filter(s=>s.branch===br);
+      const maxR=Math.max(...nodes.map(s=>s.row));
+      h+=`<div class="scol" style="--br:${meta.c}"><h3>${meta.n}</h3><div class="sgrid">`;
+      for(let r=0;r<=maxR;r++){
+        const row=nodes.filter(s=>s.row===r).sort((a,b)=>a.col-b.col);
+        h+=`<div class="srow">`;
+        row.forEach(s=>{
+          const st=skillState(s);
+          const pop=UI._pop===s.id?' pop':'';
+          const sel=UI.skillSel===s.id?' sel':'';
+          h+=`<button class="snode ${st}${pop}${sel}" data-act="skill" data-id="${s.id}" style="--br:${meta.c}"><b>${s.n}</b><small>${st==='owned'?'OWNED':s.cost+' SP'}</small></button>`;
+        });
+        h+=`</div>`;
+      }
+      h+=`</div></div>`;
+    });
+    h+=`</div>`;
+    const s=SKILL_BY[UI.skillSel];
+    if(s && s.id!=='root'){
+      const st=skillState(s);
+      h+=`<div class="sdetail"><b style="color:${(BRANCH[s.branch]||{}).c||'#ffd23a'}">${s.n}</b> · ${st.toUpperCase()}<br>${s.d}`;
+      if(st==='available') h+=`<button class="buy wide" data-act="unlock" data-id="${s.id}">UNLOCK · ${s.cost} SP</button>`;
+      else if(st==='wait') h+=`<div class="meta">Need ${s.cost} skill point${s.cost>1?'s':''}.</div>`;
+      else if(st==='locked') h+=`<div class="meta">Unlock the skills above this one first.</div>`;
+      h+=`</div>`;
+    } else h+=`<div class="sdetail">Tap a skill to read it. Gold nodes are ready to buy. Dim nodes are still locked.</div>`;
+    p.innerHTML=h; UI.closeBtn('skills');
+  },
+  pickSkill(id){
+    UI.skillSel=id;
+    UI.render();
+  },
+  buySkill(id){
+    const s=SKILL_BY[id]; if(!s) return;
+    if(unlockSkill(id)){
+      UI.skillSel=id;
+      UI._pop=id;
+      UI.toast('Unlocked <b>'+s.n+'</b>.', 1600);
+      UI.render();
+      clearTimeout(UI._popT);
+      UI._popT=setTimeout(()=>{ UI._pop=null; if(UI.open==='skills') UI.render(); }, 580);
+    } else UI.render();
   },
   paintIcons(root){
     root.querySelectorAll('canvas[data-fish]').forEach(c=>{
@@ -155,27 +219,37 @@ const UI = {
     zone.style.width=(w*100)+'%';
     mark.style.left=(m*100)+'%';
     prog.style.width=(Play.prog*100)+'%';
-    const tmax=tenMax(G.up.line);
+    const tmax=tenMaxNow();
     ten.style.width=(clamp(Play.ten/tmax,0,1)*100)+'%';
     wrap.classList.toggle('hot', Play.ten/tmax>0.7);
     $('#f-tip').textContent = inZ? 'HOLD THE ZONE' : 'THE FISH IS RUNNING';
   },
-  showCatch(f,w,val,first,full){
+  showCatch(f,w,val,first,full,xp,leveled){
     const el=$('#catch');
     el.hidden=false;
     el.innerHTML=`<div class="card">
       ${first?'<div class="new">NEW LOG ENTRY</div>':''}
-      <canvas id="catch-cv" width="64" height="38"></canvas>
+      <canvas id="catch-cv" width="192" height="112"></canvas>
       <h2>${f.name}</h2>
       <div class="rar" style="color:${RAR[f.rar].c}">${RAR[f.rar].n}</div>
-      <div class="meta">${fmtKg(w)} · worth <b>${fmt(val)}</b>${full?'<br>The creel is full, so this one must be sold.':''}</div>
+      <div class="meta">${fmtKg(w)} · worth <b>${fmt(val)}</b> · +${xp||0} XP${leveled?' · LEVEL UP':''}${full?'<br>The creel is full, so this one must be sold.':''}</div>
       <div class="btns">
         <button class="buy" data-act="sell">SELL ${fmt(val)}</button>
         ${full?'':'<button class="buy tier" data-act="keep">KEEP</button>'}
       </div>
     </div>`;
-    const cv=$('#catch-cv'), g=cv.getContext('2d'); g.imageSmoothingEnabled=false;
-    g.drawImage(fishBig(f),0,0);
+    const paint=fr=>{
+      const cv=$('#catch-cv'); if(!cv) return;
+      const g=cv.getContext('2d'); g.imageSmoothingEnabled=false;
+      g.clearRect(0,0,cv.width,cv.height);
+      g.drawImage(fishBig(f, fr||0),0,0);
+    };
+    paint(0);
+    clearInterval(UI._cf);
+    if(fishFrames(f)>1 && !(Scene&&Scene.rm)){
+      let fr=0;
+      UI._cf=setInterval(()=>{ fr=(fr+1)%fishFrames(f); paint(fr); }, 180);
+    }
     requestAnimationFrame(()=>el.classList.add('show'));
   },
   hint(msg){
@@ -200,6 +274,7 @@ const UI = {
     $('#water').textContent=w?w.n:'THE SEA';
     $('#tod').textContent=todName(G.tod);
     $('#caught').textContent=G.caught;
+    const lv=$('#level'); if(lv) lv.textContent=String(G.level||0);
     const pow=$('#power');
     if(Play.phase==='charge'){ pow.classList.add('on'); $('#power-fill').style.height=(Play.power*100)+'%'; }
     else pow.classList.remove('on');

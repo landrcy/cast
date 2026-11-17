@@ -32,6 +32,7 @@ function fresh(){
   G.money=0; G.up={rod:0,line:0,bait:0,boat:0};
   G.unlocked=['sea']; G.water='sea';
   G.log={}; G.creel=[]; G.tod=0.40; G.caught=0; G.tut=0; G.best=0; G.sold=0;
+  G.xp=0; G.level=0; G.sp=0; G.skills={};
 }
 function save(){
   try{ localStorage.setItem(SAVE_KEY, JSON.stringify({v:1, G, t:Date.now()})); }catch(e){}
@@ -48,12 +49,18 @@ function load(){
     if(!G.unlocked.includes('sea')) G.unlocked.unshift('sea');
     G.water=WATERS.some(w=>w.id===g.water && G.unlocked.includes(g.water))?g.water:'sea';
     G.log=(g.log&&typeof g.log==='object')?g.log:{};
-    G.creel=Array.isArray(g.creel)?g.creel.filter(x=>FISH_BY[x.id]&&x.w>0).slice(0,CREEL_MAX):[];
+    G.xp=Math.max(0,+g.xp||0);
+    G.level=Math.max(0,+g.level||0);
+    G.sp=Math.max(0,+g.sp||0);
+    G.skills=(g.skills&&typeof g.skills==='object')?g.skills:{};
+    const cap=typeof creelMax==='function'?Math.max(creelMax(),12):20;
+    G.creel=Array.isArray(g.creel)?g.creel.filter(x=>FISH_BY[x.id]&&x.w>0).slice(0,cap):[];
     G.tod=isFinite(+g.tod)?((+g.tod)%1+1)%1:0.40;
     G.caught=Math.max(0,+g.caught||0);
     G.tut=+g.tut||0;
     G.best=Math.max(0,+g.best||0);
     G.sold=Math.max(0,+g.sold||0);
+    // grandfather waters already unlocked on older saves
     return true;
   }catch(e){ return false; }
 }
@@ -80,7 +87,7 @@ function releaseCharge(){
   beginCast(p, 0);
 }
 function beginCast(power, aimX){
-  const maxP=rodPower(G.up.rod);
+  const maxP=rodPowerNow();
   const used=clamp(power,0.12,1)*maxP;
   // accuracy: better rod = less random aim
   const spread=(0.55 - G.up.rod*0.05);
@@ -113,7 +120,8 @@ function tickCast(dt){
 function beginWait(){
   Play.phase='wait'; Play.pose='idle'; Play.power=0;
   const [a,b]=waitRange(G.up.bait);
-  Play.biteIn=a+Math.random()*(b-a);
+  const m=waitMulNow();
+  Play.biteIn=a*m+Math.random()*((b-a)*m);
   Play.waitT=0;
   UI.hint('WATCH THE BOBBER · TAP TO REEL IN');
 }
@@ -138,7 +146,7 @@ function startBite(){
     return;
   }
   Play.hooked=f.fish; Play.weight=f.w; Play.value=f.val;
-  Play.phase='bite'; Play.hookT=hookWin(G.up.rod);
+  Play.phase='bite'; Play.hookT=hookWinNow();
   if(Play.bob){ Play.bob.under=true; addRipple(Play.bob.x, Play.bob.y, 1.1); addSplash(Play.bob.x, Play.bob.y, 10, 0.9); }
   punch(2);
   UI.hint('TAP TO HOOK!');
@@ -162,7 +170,7 @@ function rollFish(){
     const w=lerp(f.w[0], f.w[1], Math.random());
     return {fish:f, w, val:fishValue(f,w)};
   }
-  const luck=luckFromBait(G.up.bait) + (ADMIN&&ADMIN.xluck||0);
+  const luck=luckNow();
   const far=Play.bob? Play.bob.u : 0.3;
   let rar = Play.forceRar>=0? Play.forceRar : rollRarity(luck, far, Math.random);
   Play.forceRar=-1;
@@ -175,7 +183,11 @@ function rollFish(){
   if(!cand.length) cand=pool.filter(f=>f.rar===0);
   if(!cand.length) return null;
   // weight by tod match
-  const weights=cand.map(f=>todMatch(f.tod, G.tod));
+  const weights=cand.map(f=>{
+    let w=todMatch(f.tod, G.tod);
+    if(hasSkill('u3') && f.tod==='night') w*=2.6;
+    return w;
+  });
   const sum=weights.reduce((a,b)=>a+b,0);
   let r=Math.random()*sum, pick=cand[0];
   for(let i=0;i<cand.length;i++){ r-=weights[i]; if(r<=0){ pick=cand[i]; break; } }
@@ -192,7 +204,7 @@ function startFight(){
   Play.mark=0.5; Play.zone=0.5;
   const hard = (RAR[f.rar].m/4) * f.fight * (0.85+0.3*(Play.weight/((f.w[0]+f.w[1])/2)));
   Play._fight={hard, t:0, yank:0, yankIn:0.4+Math.random()*0.6, dir:(Math.random()<0.5?-1:1)};
-  Play.zoneW=clamp(0.26 - f.rar*0.025 + zoneBonus(G.up.rod) - (hard-1)*0.02, 0.10, 0.34);
+  Play.zoneW=clamp(0.26 - f.rar*0.025 + zoneBonusNow() - (hard-1)*0.02, 0.10, 0.34);
   Play.zvel=0;
   UI.hint('');
   UI.showFight(true);
@@ -226,12 +238,12 @@ function tickFight(dt){
 
   const inZ=Math.abs(Play.mark-Play.zone) <= Play.zoneW*0.5;
   const fillRate= (0.13 / Math.max(0.7, F.hard*0.7));
-  if(inZ){ Play.prog=clamp(Play.prog+fillRate*dt,0,1); Play.ten=Math.max(0, Play.ten-dt*18); Play.bend=Math.max(0.1, Play.bend-dt*0.6); }
+  if(inZ){ Play.prog=clamp(Play.prog+fillRate*dt,0,1); Play.ten=Math.max(0, Play.ten-dt*18*tenRecoverNow()); Play.bend=Math.max(0.1, Play.bend-dt*0.6); }
   else { Play.ten=clamp(Play.ten + dt*(16+F.hard*6), 0, 100); Play.bend=clamp(Play.bend+dt*0.5,0,1); }
 
   UI.tickFight(inZ);
 
-  const tmax=tenMax(G.up.line);
+  const tmax=tenMaxNow();
   if(Play.ten>=tmax){ snapLine(); return; }
   if(Play.prog>=1){ landFish(); return; }
 }
@@ -278,13 +290,17 @@ function openCatch(){
   G.log[f.id]=rec;
   G.caught++;
   if(f.rar>G.best) G.best=f.rar;
-  const full=G.creel.length>=CREEL_MAX;
+  const full=G.creel.length>=creelMax();
   if(!full) G.creel.push({id:f.id, w, val});
+  const xp=catchXP(f,w);
+  const lv0=G.level||0;
+  awardXP(xp);
   save();
-  UI.showCatch(f, w, val, first, full);
+  UI.showCatch(f, w, val, first, full, xp, (G.level||0)>lv0);
 }
 
 function afterCatch(){
+  if(UI&&UI._cf) clearInterval(UI._cf);
   document.getElementById('catch').hidden=true;
   document.getElementById('catch').classList.remove('show');
   Play.hooked=null; Play.phase='idle'; Play.pose='idle';
@@ -314,22 +330,30 @@ function sellCaught(val){
 function buyUp(k){
   const u=UPG[k], L=G.up[k];
   if(L>=u.max) return;
+  if(k==='rod' && L+1>rodCap()){
+    UI.toast('Unlock <b>'+rodGateName(rodCap())+'</b> on the skill tree first.', 2000);
+    return;
+  }
   const c=u.cost(L);
   if(G.money<c){ UI.toast('Not enough cash.', 1200); return; }
   G.money-=c; G.up[k]=L+1;
-  if(k==='boat'){
-    // unlock the water that this boat level opens
-    WATERS.forEach(w=>{ if(w.boat<=G.up.boat && !G.unlocked.includes(w.id)) G.unlocked.push(w.id); });
-  }
   save(); UI.render(); UI.toast(u.n+' upgraded.', 1200);
 }
 
+function rodGateName(cap){
+  if(cap<6) return 'RODWRIGHT';
+  if(cap<8) return 'MASTER ANGLER';
+  return 'GRAND CAST';
+}
 function travelTo(id){
   const w=WATERS.find(x=>x.id===id); if(!w) return;
+  const need=waterSkill(id);
+  if(need && need!=='root' && !hasSkill(need) && !G.unlocked.includes(id)){
+    UI.toast('Unlock this water on the <b>SKILLS</b> tree first.', 1800);
+    return;
+  }
   if(!G.unlocked.includes(id)){
-    if(G.up.boat<w.boat){ UI.toast('Upgrade the boat first.', 1600); return; }
-    if(G.money<w.cost){ UI.toast('Not enough cash.', 1400); return; }
-    G.money-=w.cost; G.unlocked.push(id); save();
+    G.unlocked.push(id); save();
   }
   if(G.water===id){ UI.close(); return; }
   if(Play.phase!=='idle' && Play.phase!=='wait' && Play.phase!=='snap'){ UI.toast('Finish this cast first.', 1400); return; }

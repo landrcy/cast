@@ -100,9 +100,17 @@ function applyDemo(){
   const kind=q.get('demo')||'1';
   // a mid-game save so screenshots look lived-in
   G.money=kind==='max'?50000:420;
-  G.up.rod=kind==='max'?8:2; G.up.line=kind==='max'?8:2; G.up.bait=kind==='max'?8:1; G.up.boat=kind==='max'?4:1;
+  G.up.rod=kind==='max'?12:2; G.up.line=kind==='max'?8:2; G.up.bait=kind==='max'?8:1; G.up.boat=kind==='max'?4:1;
   G.unlocked=['sea','lake'];
-  if(kind==='max') G.unlocked=WATERS.map(w=>w.id);
+  G.skills={}; G.xp=20; G.level=8; G.sp=3;
+  ['a1','a2','a3','a4','l1','l2','u1','v1'].forEach(id=>G.skills[id]=1);
+  if(kind==='max' || kind==='skills'){
+    if(kind==='max'){
+      SKILLS.forEach(s=>{ if(!s.auto) G.skills[s.id]=1; });
+      G.level=19; G.sp=2; G.xp=40;
+      G.unlocked=WATERS.map(w=>w.id);
+    }
+  }
   G.tod = kind==='night'?0.90 : kind==='dusk'?0.74 : 0.42;
   G.tut=1; G.caught=11;
   const seed=['minnow','sardine','perch','guppy','kelpbas','tang','shiner','sunfish','catfish','lperch','ctrout'];
@@ -115,6 +123,7 @@ function applyDemo(){
   if(kind==='log'){ setTimeout(()=>UI.toggle('log'), 200); }
   if(kind==='shop'){ setTimeout(()=>UI.toggle('shop'), 200); }
   if(kind==='map'){ setTimeout(()=>UI.toggle('map'), 200); }
+  if(kind==='skills' || kind==='tree'){ setTimeout(()=>UI.toggle('skills'), 200); }
   if(kind==='fight' || kind==='reel'){
     const f=FISH_BY.marlin; Play.hooked=f; Play.weight=14; Play.value=fishValue(f,14);
     const land=landingPoint(0.7, 0.1);
@@ -123,7 +132,8 @@ function applyDemo(){
   }
   if(kind==='catch'){
     const f=FISH_BY.aurora; Play.hooked=f; Play.weight=18; Play.value=fishValue(f,18); Play.phase='catch';
-    setTimeout(()=>UI.showCatch(f,18,Play.value,true,false), 300);
+    const xp=catchXP(f,18);
+    setTimeout(()=>UI.showCatch(f,18,Play.value,true,false,xp,false), 300);
   }
   UI.tick(true);
 }

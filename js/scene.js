@@ -25,6 +25,7 @@ function resizeScene(){
   Scene.W=W; Scene.H=H; Scene.scale=scale;
   Scene.hy = Math.floor(H * (H>W*1.15 ? 0.29 : 0.38));
   Scene.dockY = Math.floor(H * (H>W*1.15 ? 0.62 : 0.70));
+  Scene.uiPad = Math.ceil((H>W*1.15 ? 68 : 52) / scale);
   if(!Scene.buf || Scene.buf.width!==W || Scene.buf.height!==H){
     Scene.buf=document.createElement('canvas'); Scene.buf.width=W; Scene.buf.height=H;
     Scene.g=Scene.buf.getContext('2d'); Scene.g.imageSmoothingEnabled=false;
@@ -43,19 +44,8 @@ function seedDecor(){
   for(let i=0;i<5;i++) Scene.clouds.push({x:rnd()*W, y:6+rnd()*(hy-22), s:ART.clouds[i%ART.clouds.length], v:0.08+rnd()*0.12, f:i});
   Scene.birds=[];
   for(let i=0;i<3;i++) Scene.birds.push({x:rnd()*W, y:10+rnd()*(hy-28), v:0.25+rnd()*0.35, z:0.7+rnd()*0.5, fr:0, delay:rnd()*200});
-  // seaweed clumps at the dock edge, left and right of the pier
+  // no surface seaweed (looked like floating sticks). Kelp is omitted on this surface view.
   Scene.seaweed=[];
-  const dy=Scene.dockY;
-  for(let k=0;k<7;k++){
-    const side=k<4?-1:1;
-    Scene.seaweed.push({
-      x: W*0.5 + side*(W*0.18 + rnd()*W*0.32),
-      y: dy + 4 + rnd()*18,
-      h: 10+Math.floor(rnd()*16),
-      ph: rnd()*6,
-      pal: k%2? ['#0d3a28','#1a6a40','#3a9a58'] : ['#0a3040','#145848','#2a8860']
-    });
-  }
   Scene.bubbles=[];
   Scene.bottles=[];
 }
@@ -122,13 +112,13 @@ function dockHalf(y){
 }
 
 function waveAt(x, y, t, water){
-  const {hy,dockY}=Scene;
-  const d=clamp((y-hy)/Math.max(1,dockY+30-hy),0,1);
-  const amp=(water==='abyss'?1.4:water==='lake'?0.55:water==='void'?0.3:1) * (0.6+d*2.4);
-  const k1=8+d*22, k2=4+d*10;
-  return Math.sin(x/k1 + t*1.6 + d*3.2)*amp
-       + Math.sin(x/k2 - t*1.15 + d*1.4)*amp*0.55
-       + Math.sin((x*0.35+y*0.2)/ (10+d*8) + t*0.7)*amp*0.35;
+  // small *vertical* displacement in pixels for crest lines only — never used to pick big color wedges
+  const {hy,H}=Scene;
+  const d=clamp((y-hy)/Math.max(1,H-hy),0,1);
+  const calm=(water==='lake'||water==='void')?0.5: water==='abyss'?1.2: water==='ember'?0.8:1;
+  const amp=calm*(0.5+d*2.0);
+  const wl=16+d*34;
+  return Math.sin(x/wl + t*1.35)*amp + Math.sin(x/(wl*0.55) - t*1.05)*amp*0.3;
 }
 
 function renderScene(state){
@@ -224,47 +214,20 @@ function renderScene(state){
   // distant land / features on the horizon
   drawHorizonFeatures(g, W, hy, water, pal);
 
-  // WATER surface (from horizon to bottom, dock will cover the center)
+  // WATER surface: calm perspective gradient + horizontal wave crests + a sun column. No diagonal caustics, no stray streaks.
   const img2=g.getImageData(0,hy-1,W,H-(hy-1));
   const off=hy-1;
   const wcols=watC;
   for(let y=hy-1;y<H;y++){
     const d=clamp((y-(hy-1))/Math.max(1,H-hy),0,1);
-    // nearer water is lighter / more turquoise, far water is deeper (or vice versa for reflection)
-    // looking out: far water (small d) reflects sky and is paler; near is richer
-    const depth = water==='void'? 0.3+d*0.4 : 0.15+d*0.75;
+    const depth = water==='void'? 0.25+d*0.45 : 0.12+d*0.72;
     const f=depth*(wcols.length-1), i0=Math.floor(f), frac=f-i0;
-    const wav = rm?0: waveAt(0,y,t,water); // used as phase; per-x below
     for(let x=0;x<W;x++){
-      const wv=rm?0:waveAt(x,y,t,water);
-      const crest=wv>0.7+d;
-      const trough=wv<-0.8;
       const bay=BAYER4[y&3][x&3]/16;
       let c = frac>bay ? wcols[Math.min(wcols.length-1,i0+1)] : wcols[i0];
-      if(crest) c = wcols[Math.min(wcols.length-1,i0+1)] || c;
-      if(trough) c = wcols[Math.max(0,i0-1)] || c;
-      // shimmer: hard white/cyan pixels on crests only (not a glow)
-      if(!rm && crest && hash2(x, ((t*6)|0), 3)<0.04) c = pal.warm? [255,236,200] : [232,252,255];
-      // caustics in the near band (d>0.45): moving bright bands
-      if(d>0.55 && water!=='void' && water!=='ember'){
-        const cau=Math.sin(x*0.10 + y*0.16 - t*1.6);
-        if(cau>0.88) c = wcols[Math.min(wcols.length-2, i0+1)];
-      }
-      // moon / sun path reflection (a narrow column of brighter pixels)
-      if(pal.night || water==='void'){
-        const mx=Scene.moon.x, ad=Math.abs(x-mx);
-        if(ad<3+d*6 && (hash2(x,y,((t*3)|0))>0.45)) c=[ Math.min(255,c[0]+50), Math.min(255,c[1]+60), Math.min(255,c[2]+80) ];
-      } else if(pal.sun){
-        const mx=Scene.sun.x, ad=Math.abs(x-mx);
-        if(ad<2+d*5 && hash2(x,y,((t*4)|0))>0.5){
-          c = pal.warm? [Math.min(255,c[0]+40),Math.min(255,c[1]+24),Math.min(255,c[2]+8)]
-                      : [Math.min(255,c[0]+24),Math.min(255,c[1]+36),Math.min(255,c[2]+40)];
-        }
-      }
       const k=((y-off)*W+x)*4;
       img2.data[k]=c[0]; img2.data[k+1]=c[1]; img2.data[k+2]=c[2]; img2.data[k+3]=255;
     }
-    // horizon line
     if(y===hy){
       for(let x=0;x<W;x++){
         const k=((y-off)*W+x)*4;
@@ -272,10 +235,50 @@ function renderScene(state){
       }
     }
   }
+  // horizontal wave crest lines (perspective: larger and more spaced near the camera)
+  const nWaves = water==='void'?6: water==='lake'?8:10;
+  const spark= pal.warm? [255,236,200] : [232,252,255];
+  const hi= wcols[Math.min(wcols.length-1, wcols.length-2)];
+  for(let i=0;i<nWaves;i++){
+    const u=i/(nWaves-1);
+    const baseY=hy+4 + Math.pow(u,1.2)*(H-hy-8);
+    const amp=rm?0: (0.6+u*2.4)*(water==='lake'||water==='void'?0.5:1);
+    const wl=18+u*40;
+    for(let x=0;x<W;x++){
+      const y=Math.round(baseY + Math.sin(x/wl + t*1.3 + i*0.7)*amp);
+      if(y<=hy || y>=H) continue;
+      const k=((y-off)*W+x)*4;
+      img2.data[k]=hi[0]; img2.data[k+1]=hi[1]; img2.data[k+2]=hi[2]; img2.data[k+3]=255;
+      // sparse 1px sparkles on the crest, not a glow
+      if(!rm && hash2(x, i, ((t*5)|0))<0.06){
+        img2.data[k]=spark[0]; img2.data[k+1]=spark[1]; img2.data[k+2]=spark[2];
+      }
+    }
+  }
+  // sun / moon shimmer column — only below the body, widening slightly near the camera
+  if((pal.sun && !pal.night) || pal.night || water==='void'){
+    const mx= (pal.night||water==='void') ? Scene.moon.x : Scene.sun.x;
+    const warm=pal.warm;
+    for(let y=hy+1;y<H;y++){
+      const d=clamp((y-hy)/Math.max(1,H-hy),0,1);
+      const half=1+d*3;
+      for(let x=Math.floor(mx-half); x<=Math.ceil(mx+half); x++){
+        if(x<0||x>=W) continue;
+        const ad=Math.abs(x-mx)/half;
+        if(hash2(x, (y/2)|0, ((t*8)|0)) < 0.32+ad*0.45) continue;
+        const k=((y-off)*W+x)*4;
+        const add= Math.round((1-ad)* (warm? [36,22,8]:[22,34,40])[0] );
+        // channel-wise lift, clamped, hard
+        const lift=warm? [40,24,8]: [24,36,40];
+        img2.data[k]  =Math.min(255, img2.data[k]  +Math.round(lift[0]*(1-ad)));
+        img2.data[k+1]=Math.min(255, img2.data[k+1]+Math.round(lift[1]*(1-ad)));
+        img2.data[k+2]=Math.min(255, img2.data[k+2]+Math.round(lift[2]*(1-ad)));
+      }
+    }
+  }
   g.putImageData(img2,0,hy-1);
 
-  // seaweed in the near water (left/right of dock)
-  drawSeaweed(g, state);
+  // no surface seaweed
 
   // bottles drifting on the sea (Sea of Thought flavor)
   if(water==='sea') drawBottles(g, state);
@@ -435,20 +438,28 @@ function drawDock(g, water, pal, state){
     : ['#3a2414','#5a3820','#7a5230','#c4a06a'];
   const seam='#1a1008';
   const y0=dockY, y1=H;
+  // 1px horizontal plank seams in perspective
+  if(!Scene._dockSeams || Scene._seamH!==H || Scene._seamDock!==dockY){
+    const set=new Set();
+    for(let k=1;k<28;k++){
+      const u=k/28;
+      const y=Math.round(y0 + (y1-y0)*(u*u)); // packed near the far end, open near the camera
+      if(y>y0+2 && y<y1-2) set.add(y);
+    }
+    Scene._dockSeams=set; Scene._seamH=H; Scene._seamDock=dockY;
+  }
   // planks receding from the camera
   for(let y=y0;y<y1;y++){
     const half=dockHalf(y);
     const x0=Math.floor(W/2-half), x1=Math.ceil(W/2+half);
     const t=(y-y0)/Math.max(1,y1-y0);
-    // number of board seams stays constant in world, compresses in screen
     const boards=7;
     for(let x=x0;x<=x1;x++){
       const u=(x-x0)/Math.max(1,x1-x0);
       const b=Math.min(boards-1, Math.floor(u*boards));
       const edge = Math.abs(u*boards-b)<0.08 || Math.abs(u*boards-(b+1))<0.08;
-      // cross-board seams (closer together near the horizon)
-      const worldY = 1/(0.12+t);
-      const cross = ((worldY*6)|0)%7===0;
+      // 1px cross-seams only, projected from even world depths (no thick bands)
+      const cross = Scene._dockSeams && Scene._dockSeams.has(y);
       let c=wood[1+(hash2(b, (y/Math.max(1,(1-t)*8)|0), 4)>0.55?1:0)];
       if(hash2(x,y,2)>0.97) c=wood[0]; // knot / dent
       if(edge) c=wood[0];
@@ -510,7 +521,7 @@ function drawLine(g, x0,y0,x1,y1, taut){
 function drawSurfaceFish(g, state){
   const b=state.bob, f=state.hooked, t=Scene.t;
   if(!b||!f) return;
-  const spr=fishSpr(f,false);
+  const spr=fishSpr(f,false, Math.floor(t*4)%fishFrames(f));
   // fish breaks the surface at the bobber, rocking
   const sc=Math.max(0.35, b.sc/5);
   const dw=Math.max(10, spr.width*sc), dh=Math.max(6, spr.height*sc);

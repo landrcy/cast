@@ -16,6 +16,9 @@ const ADMIN = {
     <div class="adm-r"><button class="buy" data-adm="tod" data-v="0.26">DAWN</button><button class="buy" data-adm="tod" data-v="0.45">DAY</button><button class="buy" data-adm="tod" data-v="0.74">DUSK</button><button class="buy" data-adm="tod" data-v="0.90">NIGHT</button></div>
     <h3>LUCK BONUS <small class="adm-v" id="adm-lv">+${ADMIN.xluck.toFixed(2)}</small></h3>
     <input id="adm-luck" class="adm-sl" type="range" min="0" max="5" step="0.1" value="${ADMIN.xluck}">
+    <h3>SKILLS <small class="adm-v">LV ${G.level||0} · ${G.sp||0} SP · ${G.xp||0} XP</small></h3>
+    <div class="adm-r"><button class="buy" data-adm="xp" data-v="50">+50 XP</button><button class="buy" data-adm="xp" data-v="400">+400 XP</button><button class="buy" data-adm="sp" data-v="1">+1 SP</button><button class="buy" data-adm="sp" data-v="5">+5 SP</button></div>
+    <div class="adm-r"><button class="buy wide" data-adm="allskills">UNLOCK ALL SKILLS</button></div>
     <h3>WATERS</h3>
     <div class="adm-r"><button class="buy wide" data-adm="unlockw">UNLOCK ALL WATERS + MAX BOAT</button></div>
     <div class="adm-r"><select id="adm-water">${ADMIN.opt(WATERS, G.water, w=>w.id, w=>w.n)}</select><button class="buy" data-adm="gow">GO</button></div>
@@ -45,7 +48,19 @@ const ADMIN = {
     if(a==='cashadd'){ G.money+=ADMIN.cashAmt(); return ADMIN.done('Cash added.'); }
     if(a==='cashset'){ G.money=ADMIN.cashAmt(); return ADMIN.done('Cash set.'); }
     if(a==='tod'){ G.tod=+b.dataset.v; return ADMIN.done('Time set to '+todName(G.tod)+'.'); }
-    if(a==='unlockw'){ G.up.boat=UPG.boat.max; WATERS.forEach(w=>{ if(!G.unlocked.includes(w.id)) G.unlocked.push(w.id); }); return ADMIN.done('All waters unlocked.'); }
+    if(a==='xp'){ awardXP(+b.dataset.v); return ADMIN.done('XP granted.'); }
+    if(a==='sp'){ G.sp=(G.sp||0)+(+b.dataset.v); return ADMIN.done('Skill points added.'); }
+    if(a==='allskills'){
+      G.skills=G.skills||{};
+      SKILLS.forEach(s=>{ if(!s.auto) G.skills[s.id]=1; if(s.water && !G.unlocked.includes(s.water)) G.unlocked.push(s.water); });
+      return ADMIN.done('Skill tree unlocked.');
+    }
+    if(a==='unlockw'){
+      G.up.boat=UPG.boat.max;
+      WATERS.forEach(w=>{ if(!G.unlocked.includes(w.id)) G.unlocked.push(w.id); });
+      ['v1','v2','v3','v4'].forEach(id=>{ G.skills=G.skills||{}; G.skills[id]=1; });
+      return ADMIN.done('All waters unlocked.');
+    }
     if(a==='gow'){ const id=$('#adm-water').value; if(!G.unlocked.includes(id)) G.unlocked.push(id); travelTo(id); return ADMIN.done(); }
     if(a==='bite'){
       if(Play.phase==='idle'){ // drop a mid-range bobber then bite
@@ -54,7 +69,13 @@ const ADMIN = {
       else UI.toast('Already in a catch.', 1200);
       return;
     }
-    if(a==='maxup'){ Object.keys(UPG).forEach(k=>G.up[k]=UPG[k].max); WATERS.forEach(w=>{ if(!G.unlocked.includes(w.id)) G.unlocked.push(w.id); }); return ADMIN.done('Upgrades maxed.'); }
+    if(a==='maxup'){
+      Object.keys(UPG).forEach(k=>G.up[k]=UPG[k].max);
+      WATERS.forEach(w=>{ if(!G.unlocked.includes(w.id)) G.unlocked.push(w.id); });
+      G.skills=G.skills||{};
+      SKILLS.forEach(s=>{ if(!s.auto) G.skills[s.id]=1; });
+      return ADMIN.done('Upgrades maxed.');
+    }
     if(a==='unlocklog'){
       FISH.forEach(f=>{ const rec=G.log[f.id]||{n:0,best:0}; rec.n=Math.max(rec.n,1); rec.best=Math.max(rec.best, (f.w[0]+f.w[1])/2); G.log[f.id]=rec; });
       G.caught=Math.max(G.caught, FISH.length); return ADMIN.done('Log filled.');
