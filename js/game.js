@@ -72,7 +72,7 @@ function resetPlay(){
   Play.flyFish=null; Play.flash=0;
 }
 
-function canCast(){ return MODE==='play' && (Play.phase==='idle' || Play.phase==='wait') && !UI.open && !document.getElementById('catch').classList.contains('show'); }
+function canCast(){ return MODE==='play' && (Play.phase==='idle' || Play.phase==='wait') && !UI.open && !(ADMIN&&ADMIN.open) && !document.getElementById('catch').classList.contains('show'); }
 
 function startCharge(){
   if(Play.phase==='wait'){ reelIn(false); return; }

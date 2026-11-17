@@ -14,6 +14,7 @@ const UI = {
       if(b.dataset.act==='sell'){ sellCaught(Play.value); afterCatch(); UI.toast('Sold for <b>'+fmt(Play.value)+'</b>.', 1400); }
       else afterCatch();
     });
+    window.addEventListener('resize', ()=>UI.fitCatchArt());
   },
   start(freshSave){
     if(freshSave){ if(!confirm('Start a new game? This replaces your save.')) return; fresh(); save(); }
@@ -111,12 +112,14 @@ const UI = {
     const show=FISH_BY[UI.logSel];
     if(show){
       const rec=G.log[show.id];
-      h+=`<div class="log-d">${rec?`<b>${show.name}</b> · <span style="color:${RAR[show.rar].c}">${RAR[show.rar].n}</span><br>
+      const spr=rec?fishBig(show):fishSpr(show,true);
+      h+=`<div class="log-d"><div class="log-art"><canvas data-fishbig="${show.id}" data-sil="${rec?0:1}" width="${spr.width}" height="${spr.height}"></canvas></div>
+        ${rec?`<b>${show.name}</b> · <span style="color:${RAR[show.rar].c}">${RAR[show.rar].n}</span><br>
         ${WATERS.find(w=>w.id===show.water).n} · ${show.tod==='any'?'ANY HOUR':show.tod.toUpperCase()}<br>
         Caught ${rec.n} · best ${fmtKg(rec.best)} · sells about ${fmt(show.val)}`
         :`<b>???</b><br>An unseen fish of the ${WATERS.find(w=>w.id===show.water).n.toLowerCase()}.`}</div>`;
     } else h+=`<div class="log-d">Tap a silhouette to read it. Unseen fish stay as shadows until you land one.</div>`;
-    p.innerHTML=h; UI.closeBtn('log'); UI.paintIcons(p);
+    p.innerHTML=h; UI.closeBtn('log'); UI.paintIcons(p); UI.paintBig(p);
   },
   rMap(){
     const p=$('#p-map');
@@ -198,6 +201,32 @@ const UI = {
       g.drawImage(fishSpr(f,sil),0,0);
     });
   },
+  paintBig(root){
+    root.querySelectorAll('canvas[data-fishbig]').forEach(c=>{
+      const f=FISH_BY[c.dataset.fishbig]; if(!f) return;
+      const sil=c.dataset.sil==='1';
+      const img=sil?fishSpr(f,true):fishBig(f);
+      const g=c.getContext('2d'); g.imageSmoothingEnabled=false; g.clearRect(0,0,c.width,c.height);
+      const sc=Math.min(c.width/img.width, c.height/img.height);
+      const tw=Math.max(1,Math.round(img.width*sc)), th=Math.max(1,Math.round(img.height*sc));
+      g.drawImage(img, Math.floor((c.width-tw)/2), Math.floor((c.height-th)/2), tw, th);
+    });
+  },
+  fitCatchArt(){
+    const cv=$('#catch-cv'); if(!cv) return;
+    const wrap=cv.parentElement; if(!wrap) return;
+    const maxW=wrap.clientWidth;
+    if(maxW<8){ requestAnimationFrame(()=>UI.fitCatchArt()); return; }
+    const myth=$('#catch') && $('#catch').classList.contains('mythic');
+    const leg=$('#catch') && $('#catch').classList.contains('legendary');
+    const cap=window.innerHeight*(myth?0.50: leg?0.42: 0.38);
+    const maxH=Math.max(16, Math.floor(Math.min(cap, myth?560: leg?420: 360)));
+    const sc=Math.min(maxW/cv.width, maxH/cv.height);
+    const w=Math.max(1, Math.round(cv.width*sc));
+    const h=Math.max(1, Math.round(cv.height*sc));
+    cv.style.width=w+'px';
+    cv.style.height=h+'px';
+  },
   paintRods(root){
     root.querySelectorAll('canvas[data-rod]').forEach(c=>{
       const rod=RODS.find(r=>r.id===c.dataset.rod); if(!rod) return;
@@ -243,13 +272,9 @@ const UI = {
     const spr=fishBig(f,0);
     const mul=f.rar>=5?1:2;
     const dw=spr.width*mul, dh=spr.height*mul;
-    const padX=f.rar>=5?32: f.rar>=4?24:18;
-    const padY=f.rar>=5?24: f.rar>=4?18:14;
-    const cw=Math.max(f.rar>=5?280:192, dw+padX*2);
-    const ch=Math.max(f.rar>=5?180:112, dh+padY*2);
     el.innerHTML=`<div class="card">
       ${first?'<div class="new">NEW LOG ENTRY</div>':''}
-      <canvas id="catch-cv" width="${cw}" height="${ch}"></canvas>
+      <div class="catch-art"><canvas id="catch-cv" width="${dw}" height="${dh}"></canvas></div>
       <h2>${f.name}</h2>
       <div class="rar" style="color:${RAR[f.rar].c}">${RAR[f.rar].n}</div>
       <div class="meta">${fmtKg(w)} · worth <b>${fmt(val)}</b> · +${xp||0} XP${leveled?' · LEVEL UP':''}${full?'<br>The creel is full, so this one must be sold.':''}</div>
@@ -262,12 +287,9 @@ const UI = {
       const cv=$('#catch-cv'); if(!cv) return;
       const g=cv.getContext('2d'); g.imageSmoothingEnabled=false;
       g.clearRect(0,0,cv.width,cv.height);
-      g.fillStyle='#041018'; g.fillRect(0,0,cv.width,cv.height);
       const img=fishBig(f, fr||0);
       const mul=f.rar>=5?1:2;
-      const dw=img.width*mul, dh=img.height*mul;
-      const x=Math.floor((cv.width-dw)/2), y=Math.floor((cv.height-dh)/2);
-      g.drawImage(img,x,y,dw,dh);
+      g.drawImage(img,0,0,img.width*mul,img.height*mul);
     };
     paint(0);
     clearInterval(UI._cf);
@@ -284,7 +306,7 @@ const UI = {
         g.fillRect(0,0,2,cv.height); g.fillRect(cv.width-2,0,2,cv.height);
       }, 80);
     }
-    requestAnimationFrame(()=>el.classList.add('show'));
+    requestAnimationFrame(()=>{ el.classList.add('show'); UI.fitCatchArt(); });
   },
   hint(msg){
     const el=$('#hint');

@@ -5,7 +5,7 @@ const Input={down:false, x:0, y:0, id:null, steer:null};
 
 function pointerOnCanvas(e){
   const t=e.target;
-  if(t.closest && (t.closest('#dock')||t.closest('#panels')||t.closest('#title')||t.closest('#howto')||t.closest('#catch')||t.closest('#hud'))) return false;
+  if(t.closest && (t.closest('#dock')||t.closest('#panels')||t.closest('#p-admin')||t.closest('#title')||t.closest('#howto')||t.closest('#catch')||t.closest('#hud'))) return false;
   return true;
 }
 
@@ -13,7 +13,7 @@ function bindInput(){
   const cv=document.getElementById('cv');
   const down=e=>{
     if(MODE!=='play') return;
-    if(e.target.closest && e.target.closest('#howto.show, #catch.show, .panel.on, #dock')) return;
+    if(e.target.closest && e.target.closest('#howto.show, #catch.show, .panel.on, #dock, #p-admin.on, .admin-modal.on')) return;
     if(UI.open && e.target.closest && e.target.closest('#panels')) return;
     // close panels if tapping the scene
     if(UI.open && pointerOnCanvas(e) && e.target===cv){ UI.close(); return; }
@@ -43,7 +43,12 @@ function bindInput(){
   window.addEventListener('keydown', e=>{
     if(ADMIN.isTyping(e)) return;
     if(e.code==='KeyL'){ e.preventDefault(); ADMIN.toggle(); return; }
-    if(e.code==='Escape'){ if(UI.open) UI.close(); return; }
+    if(e.code==='Escape'){
+      e.preventDefault();
+      if(ADMIN.open) ADMIN.close();
+      else if(UI.open) UI.close();
+      return;
+    }
     if(MODE!=='play') return;
     if(e.code==='Space' || e.code==='Enter'){
       e.preventDefault();
