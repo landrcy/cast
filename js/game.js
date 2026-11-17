@@ -278,7 +278,8 @@ function tickFly(dt){
   const e=u*u;
   ff.x=lerp(ff.x, Scene.W*0.5, 0.12+dt*2);
   ff.y=lerp(ff.y, Scene.H*0.55, 0.12+dt*2);
-  ff.sc=lerp(0.4, 2.2, e);
+  const maxSc=(ff.f && ff.f.rar>=5)?1.25:(ff.f && ff.f.rar>=3)?1.7:2.4;
+  ff.sc=lerp(0.4, maxSc, e);
   if(u>=1){ Play.flyFish=null; openCatch(); }
 }
 
@@ -301,8 +302,9 @@ function openCatch(){
 
 function afterCatch(){
   if(UI&&UI._cf) clearInterval(UI._cf);
-  document.getElementById('catch').hidden=true;
-  document.getElementById('catch').classList.remove('show');
+  const catchEl=document.getElementById('catch');
+  catchEl.hidden=true;
+  catchEl.classList.remove('show','mythic','legendary');
   Play.hooked=null; Play.phase='idle'; Play.pose='idle';
   UI.hint('HOLD TO CAST');
   UI.render();

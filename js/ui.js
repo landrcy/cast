@@ -81,11 +81,12 @@ const UI = {
       const gated=k==='rod' && !mx && L+1>cap;
       const extra=k==='rod'?' · '+(rodByLevel(L).name):k==='boat'?' · '+(UPG.boat.d(L)): '';
       const note=gated?'Unlock '+rodGateName(cap)+' on the skill tree to buy the next rod.': (u.d(L)+(mx?'':' → '+u.d(L+1)));
-      h+=`<div class="row"><div><b>${u.n}${extra}</b> <span class="pips">${'▮'.repeat(L)}<s>${'▮'.repeat(u.max-L)}</s></span>
+      const thumb=k==='rod'?`<canvas class="rodth" width="40" height="120" data-rod="${rodByLevel(L).id}"></canvas>`:'';
+      h+=`<div class="row">${thumb}<div><b>${u.n}${extra}</b> <span class="pips">${'▮'.repeat(L)}<s>${'▮'.repeat(u.max-L)}</s></span>
         <small>${note}</small></div>
         <button class="buy" data-act="buy" data-k="${k}" ${mx||gated||G.money<c?'disabled':''}>${mx?'MAX':gated?'LOCKED':fmt(c)}</button></div>`;
     });
-    p.innerHTML=h; UI.closeBtn('shop');
+    p.innerHTML=h; UI.closeBtn('shop'); UI.paintRods(p);
   },
   rLog(){
     const p=$('#p-log');
@@ -197,6 +198,16 @@ const UI = {
       g.drawImage(fishSpr(f,sil),0,0);
     });
   },
+  paintRods(root){
+    root.querySelectorAll('canvas[data-rod]').forEach(c=>{
+      const rod=RODS.find(r=>r.id===c.dataset.rod); if(!rod) return;
+      const spr=rodSpr(rod);
+      const g=c.getContext('2d'); g.imageSmoothingEnabled=false; g.clearRect(0,0,c.width,c.height);
+      const sc=Math.min(c.width/spr.width, c.height/spr.height);
+      const tw=Math.max(1,Math.round(spr.width*sc)), th=Math.max(1,Math.round(spr.height*sc));
+      g.drawImage(spr, Math.floor((c.width-tw)/2), Math.floor((c.height-th)/2), tw, th);
+    });
+  },
   paintWaters(root){
     root.querySelectorAll('canvas[data-water]').forEach(c=>{
       const g=c.getContext('2d'); g.imageSmoothingEnabled=false;
@@ -227,9 +238,18 @@ const UI = {
   showCatch(f,w,val,first,full,xp,leveled){
     const el=$('#catch');
     el.hidden=false;
+    el.classList.toggle('mythic', f.rar===5);
+    el.classList.toggle('legendary', f.rar===4);
+    const spr=fishBig(f,0);
+    const mul=f.rar>=5?1:2;
+    const dw=spr.width*mul, dh=spr.height*mul;
+    const padX=f.rar>=5?32: f.rar>=4?24:18;
+    const padY=f.rar>=5?24: f.rar>=4?18:14;
+    const cw=Math.max(f.rar>=5?280:192, dw+padX*2);
+    const ch=Math.max(f.rar>=5?180:112, dh+padY*2);
     el.innerHTML=`<div class="card">
       ${first?'<div class="new">NEW LOG ENTRY</div>':''}
-      <canvas id="catch-cv" width="192" height="112"></canvas>
+      <canvas id="catch-cv" width="${cw}" height="${ch}"></canvas>
       <h2>${f.name}</h2>
       <div class="rar" style="color:${RAR[f.rar].c}">${RAR[f.rar].n}</div>
       <div class="meta">${fmtKg(w)} · worth <b>${fmt(val)}</b> · +${xp||0} XP${leveled?' · LEVEL UP':''}${full?'<br>The creel is full, so this one must be sold.':''}</div>
@@ -242,13 +262,27 @@ const UI = {
       const cv=$('#catch-cv'); if(!cv) return;
       const g=cv.getContext('2d'); g.imageSmoothingEnabled=false;
       g.clearRect(0,0,cv.width,cv.height);
-      g.drawImage(fishBig(f, fr||0),0,0);
+      g.fillStyle='#041018'; g.fillRect(0,0,cv.width,cv.height);
+      const img=fishBig(f, fr||0);
+      const mul=f.rar>=5?1:2;
+      const dw=img.width*mul, dh=img.height*mul;
+      const x=Math.floor((cv.width-dw)/2), y=Math.floor((cv.height-dh)/2);
+      g.drawImage(img,x,y,dw,dh);
     };
     paint(0);
     clearInterval(UI._cf);
-    if(fishFrames(f)>1 && !(Scene&&Scene.rm)){
-      let fr=0;
-      UI._cf=setInterval(()=>{ fr=(fr+1)%fishFrames(f); paint(fr); }, 180);
+    if(f.rar>=5 && !(Scene&&Scene.rm)){
+      let pulse=0;
+      UI._cf=setInterval(()=>{
+        const cv=$('#catch-cv'); if(!cv) return;
+        paint(0);
+        const g=cv.getContext('2d');
+        pulse=(pulse+1)%24;
+        const a=0.10+0.10*Math.abs(Math.sin(pulse/24*Math.PI*2));
+        g.fillStyle='rgba(255,210,58,'+a.toFixed(3)+')';
+        g.fillRect(0,0,cv.width,2); g.fillRect(0,cv.height-2,cv.width,2);
+        g.fillRect(0,0,2,cv.height); g.fillRect(cv.width-2,0,2,cv.height);
+      }, 80);
     }
     requestAnimationFrame(()=>el.classList.add('show'));
   },

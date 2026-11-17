@@ -184,20 +184,17 @@ function renderScene(state){
     }
   }
 
-  // sun rays (day / dawn / dusk only, sea and lake) — hard bands, 3 colors, dithered
+  // short sun ticks only, immediately under the disc — no long diagonal wedges, no vertical shaft in the sky
   if(pal.sun && !pal.night && water!=='ember'){
     const rayCol= pal.warm? [255,230,190]: [220,246,255];
-    for(let k=-3;k<=3;k++){
-      if(k===0) continue;
-      const dirx=k*0.16;
-      for(let s=10;s<hy-sunY+2;s++){
+    const maxS=8;
+    for(let k=-1;k<=1;k++){
+      const dirx=k*0.22;
+      for(let s=7;s<7+maxS;s++){
         const px=(sunX+dirx*s)|0, py=(sunY+s)|0;
         if(py<0||py>=hy||px<0||px>=W) continue;
-        const half= (s<20?1:1);
-        const cover=0.55; // hard, mostly solid shafts
-        if(BAYER4[py&3][px&3]/16 > 0.75) continue;
+        if(BAYER4[py&3][px&3]/16 > 0.55) continue;
         putBand(img,W,px,py,rayCol);
-        if(Math.abs(k)<3 && px+1<W) putBand(img,W,px+1,py,rayCol);
       }
     }
   }
@@ -255,21 +252,27 @@ function renderScene(state){
       }
     }
   }
-  // sun / moon shimmer column — only below the body, widening slightly near the camera
+  // sun / moon shimmer: sparse sparkles in a soft column under the body only, never a solid vertical line, never on the dock
   if((pal.sun && !pal.night) || pal.night || water==='void'){
     const mx= (pal.night||water==='void') ? Scene.moon.x : Scene.sun.x;
     const warm=pal.warm;
+    const dockTop= (typeof Scene!=='undefined' && Scene.dockY) ? Scene.dockY : Math.floor(H*0.70);
+    const mid=W/2;
     for(let y=hy+1;y<H;y++){
       const d=clamp((y-hy)/Math.max(1,H-hy),0,1);
-      const half=1+d*3;
+      // dock trapezoid grows toward the camera — skip those x
+      const u=clamp((y-dockTop)/Math.max(1,H-dockTop),0,1);
+      const dockHalf = y<dockTop ? 0 : (6 + u*u*(mid*0.72));
+      const half=1.2+d*4;
       for(let x=Math.floor(mx-half); x<=Math.ceil(mx+half); x++){
         if(x<0||x>=W) continue;
+        if(y>=dockTop && Math.abs(x-mid)<dockHalf) continue;
         const ad=Math.abs(x-mx)/half;
-        if(hash2(x, (y/2)|0, ((t*8)|0)) < 0.32+ad*0.45) continue;
+        // mostly skip so it reads as sparkles, not a white pillar or 1px line
+        if(hash2(x, y, ((t*6)|0)) < 0.72+ad*0.25) continue;
+        if((x+y+(t|0))%3!==0) continue;
         const k=((y-off)*W+x)*4;
-        const add= Math.round((1-ad)* (warm? [36,22,8]:[22,34,40])[0] );
-        // channel-wise lift, clamped, hard
-        const lift=warm? [40,24,8]: [24,36,40];
+        const lift=warm? [36,22,8]: [20,30,34];
         img2.data[k]  =Math.min(255, img2.data[k]  +Math.round(lift[0]*(1-ad)));
         img2.data[k+1]=Math.min(255, img2.data[k+1]+Math.round(lift[1]*(1-ad)));
         img2.data[k+2]=Math.min(255, img2.data[k+2]+Math.round(lift[2]*(1-ad)));

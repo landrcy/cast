@@ -130,12 +130,35 @@ function applyDemo(){
     Play.bob={x:land.x,y:land.y,sc:land.sc,u:land.u,z:land.z,ph:0,under:false};
     startFight();
   }
-  if(kind==='catch'){
-    const f=FISH_BY.aurora; Play.hooked=f; Play.weight=18; Play.value=fishValue(f,18); Play.phase='catch';
-    const xp=catchXP(f,18);
-    setTimeout(()=>UI.showCatch(f,18,Play.value,true,false,xp,false), 300);
+  if(kind==='catch' || kind==='mythic'){
+    const f=FISH_BY[kind==='mythic'?'firstbot':'aurora'];
+    const w=kind==='mythic'?42:18;
+    Play.hooked=f; Play.weight=w; Play.value=fishValue(f,w); Play.phase='catch';
+    const xp=catchXP(f,w);
+    setTimeout(()=>UI.showCatch(f,w,Play.value,true,false,xp,false), 300);
   }
   UI.tick(true);
+}
+
+function paintTitleLogo(){
+  const cv=document.getElementById('logo-cv'); if(!cv) return;
+  const logo=paintLogo({scale:8});
+  cv.width=logo.width; cv.height=logo.height;
+  const g=cv.getContext('2d'); g.imageSmoothingEnabled=false; g.drawImage(logo,0,0);
+}
+
+function startGameLoop(){
+  buildArt();
+  paintTitleLogo();
+  const had=load();
+  if(had && (G.money>0||G.caught>0||G.tut)) $('#newg').hidden=false;
+  resizeScene();
+  window.addEventListener('resize', resizeScene);
+  UI.init(); ADMIN.init(); bindInput();
+  applyDemo();
+  setInterval(()=>{ if(MODE==='play') save(); }, 20000);
+  last=performance.now();
+  requestAnimationFrame(frame);
 }
 
 function boot(){
@@ -143,18 +166,10 @@ function boot(){
   if(window.matchMedia){
     window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', ev=>{ Scene.rm=ev.matches; });
   }
-  buildArt();
-  (function(){ const cv=document.getElementById('logo-cv'); if(cv){ const logo=paintLogo({scale:8}); cv.width=logo.width; cv.height=logo.height; const g=cv.getContext('2d'); g.imageSmoothingEnabled=false; g.drawImage(logo,0,0);} })();
-  const had=load();
-  if(had && (G.money>0||G.caught>0||G.tut)) $('#newg').hidden=false;
-  resizeScene();
-  window.addEventListener('resize', resizeScene);
-  UI.init(); ADMIN.init(); bindInput();
-  applyDemo();
-  // autosave every 20s while playing
-  setInterval(()=>{ if(MODE==='play') save(); }, 20000);
-  last=performance.now();
-  requestAnimationFrame(frame);
+  loadPxArt().then(startGameLoop).catch(err=>{
+    console.error(err);
+    startGameLoop();
+  });
 }
 
 boot();
