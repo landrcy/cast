@@ -127,6 +127,7 @@ function applyDemo(){
   MODE='play'; document.body.classList.add('playing'); $('#title').classList.add('out');
   if(kind==='log'){ setTimeout(()=>UI.toggle('log'), 200); }
   if(kind==='shop'){ setTimeout(()=>UI.toggle('shop'), 200); }
+  if(kind==='creel'){ setTimeout(()=>UI.toggle('creel'), 200); }
   if(kind==='map'){ setTimeout(()=>UI.toggle('map'), 200); }
   if(kind==='skills' || kind==='tree'){ setTimeout(()=>UI.toggle('skills'), 200); }
   if(kind==='fight' || kind==='reel'){

@@ -140,10 +140,14 @@ function tickWait(dt){
 }
 
 function startBite(){
-  const f=rollFish();
-  if(!f){ // nothing took it — recast window later
-    Play.biteIn=2+Math.random()*3;
-    return;
+  let f=rollFish();
+  if(!f){
+    // always land a bite if this water has any fish — no extra 2–5s wait
+    const pool=FISH.filter(ff=>ff.water===G.water);
+    if(!pool.length){ Play.biteIn=2+Math.random()*3; return; }
+    const pick=pool[(Math.random()*pool.length)|0];
+    const w=lerp(pick.w[0], pick.w[1], Math.random());
+    f={fish:pick, w, val:fishValue(pick,w)};
   }
   Play.hooked=f.fish; Play.weight=f.w; Play.value=f.val;
   Play.phase='bite'; Play.hookT=hookWinNow();
@@ -202,9 +206,15 @@ function startFight(){
   Play.phase='fight'; Play.pose='fight';
   Play.prog=0; Play.ten=8; Play.bend=0.2;
   Play.mark=0.5; Play.zone=0.5;
-  const hard = (RAR[f.rar].m/4) * f.fight * (0.85+0.3*(Play.weight/((f.w[0]+f.w[1])/2)));
-  Play._fight={hard, t:0, yank:0, yankIn:0.4+Math.random()*0.6, dir:(Math.random()<0.5?-1:1)};
-  Play.zoneW=clamp(0.26 - f.rar*0.025 + zoneBonusNow() - (hard-1)*0.02, 0.10, 0.34);
+  const midW=(f.w[0]+f.w[1])/2;
+  const wt=0.92 + 0.16*(Play.weight/midW);
+  let sec=FIGHT_SEC[f.rar] * (0.88 + 0.12*f.fight) * wt;
+  if(f.rar<=1) sec=clamp(sec, 3, 6);
+  else if(f.rar===5) sec=clamp(sec, 10, 15);
+  // yank strength only — fight length no longer uses RAR.m
+  const hard=0.7 + f.rar*0.22 + (f.fight-1)*0.18;
+  Play._fight={hard, t:0, yank:0, yankIn:0.4+Math.random()*0.6, dir:(Math.random()<0.5?-1:1), sec};
+  Play.zoneW=clamp(0.34 - f.rar*0.022 + zoneBonusNow(), 0.20, 0.42);
   Play.zvel=0;
   UI.hint('');
   UI.showFight(true);
@@ -220,14 +230,14 @@ function tickFight(dt){
   F.yankIn-=dt;
   if(F.yankIn<=0){
     F.dir=(Math.random()<0.5?-1:1);
-    F.yank= (0.6+F.hard*0.5) * (0.7+Math.random()*0.8);
-    F.yankIn=0.35+Math.random()*(1.1/Math.max(0.5,F.hard*0.5));
+    F.yank= (0.45+F.hard*0.28) * (0.7+Math.random()*0.8);
+    F.yankIn=0.45+Math.random()*(1.2/Math.max(0.6,F.hard*0.55));
     if(Play.bob && Math.random()<0.7){ addSplash(Play.bob.x, Play.bob.y, 8, 0.8); addRipple(Play.bob.x, Play.bob.y, 0.6); }
     Play.bend=clamp(Play.bend+0.35,0,1);
   }
   F.yank*=Math.pow(0.12, dt);
   Play.zvel += F.dir*F.yank*dt*2.4;
-  Play.zvel += (Math.sin(F.t*(1.2+F.hard))*0.4)*dt*F.hard;
+  Play.zvel += (Math.sin(F.t*(1.2+F.hard))*0.28)*dt*F.hard;
   Play.zvel *= Math.pow(0.18, dt);
   Play.zone = clamp(Play.zone + Play.zvel*dt, Play.zoneW*0.5, 1-Play.zoneW*0.5);
 
@@ -237,9 +247,9 @@ function tickFight(dt){
   else { Play.mark=clamp(Play.mark + (0.5-Play.mark)*dt*0.6, 0, 1); }
 
   const inZ=Math.abs(Play.mark-Play.zone) <= Play.zoneW*0.5;
-  const fillRate= (0.13 / Math.max(0.7, F.hard*0.7));
-  if(inZ){ Play.prog=clamp(Play.prog+fillRate*dt,0,1); Play.ten=Math.max(0, Play.ten-dt*18*tenRecoverNow()); Play.bend=Math.max(0.1, Play.bend-dt*0.6); }
-  else { Play.ten=clamp(Play.ten + dt*(16+F.hard*6), 0, 100); Play.bend=clamp(Play.bend+dt*0.5,0,1); }
+  const fillRate=1/Math.max(2.5, F.sec||4);
+  if(inZ){ Play.prog=clamp(Play.prog+fillRate*dt,0,1); Play.ten=Math.max(0, Play.ten-dt*20*tenRecoverNow()); Play.bend=Math.max(0.1, Play.bend-dt*0.6); }
+  else { Play.ten=clamp(Play.ten + dt*(9 + f.rar*1.6), 0, 100); Play.bend=clamp(Play.bend+dt*0.5,0,1); }
 
   UI.tickFight(inZ);
 

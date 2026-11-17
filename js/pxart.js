@@ -2,7 +2,7 @@
 // Generated-then-converted pixel art. Replaces the old code-drawn fish, rods, logo, and hands.
 
 const PXART = { fish:{}, rods:{}, logo:null, hands:null, ready:false };
-const PX_VER = '5';
+const PX_VER = '7';
 
 function pxUrl(path){ return path + '?v=' + PX_VER; }
 
@@ -160,7 +160,7 @@ function drawRodAlong(g, img, id, gx, gy, tx, ty, bend){
     const cx=gx+(tx-gx)*u + pxd*bAmt;
     const cy=gy+(ty-gy)*u + pyd*bAmt;
     // perspective taper: thicker at the grip, thinner at the tip
-    const scaleW=0.22 + (1-u)*0.42;
+    const scaleW=0.40 + (1-u)*0.70;
     const mid=px.w/2;
     for(let sx=row.min; sx<=row.max; sx++){
       const a=px.data[(srcY*px.w+sx)*4+3];
@@ -174,61 +174,109 @@ function drawRodAlong(g, img, id, gx, gy, tx, ty, bend){
   }
 }
 
+function cropHand(img, x0, x1){
+  const w=Math.max(1, x1-x0), h=img.height;
+  const c=document.createElement('canvas');
+  c.width=w; c.height=h;
+  const g=c.getContext('2d');
+  g.imageSmoothingEnabled=false;
+  g.drawImage(img, x0, 0, w, h, 0, 0, w, h);
+  return c;
+}
+
+function splitHands(){
+  if(PXART._handL || !PXART.hands) return;
+  const him=PXART.hands;
+  // empty-grip sprite: gap columns ~115–142 on a 260-wide image
+  const split=128;
+  PXART._handL=cropHand(him, 0, split);
+  PXART._handR=cropHand(him, split, him.width);
+}
+
 function drawHands(s, pose, power, bend, tipOut){
   const W=s.w, H=s.h, g=s.g;
   const pad=(typeof Scene!=='undefined' && Scene.uiPad)? Scene.uiPad : 0;
   const ground=H-pad-1;
   const dockY=(typeof Scene!=='undefined' && Scene.dockY)? Scene.dockY : Math.floor(H*0.70);
-  const him=PXART.hands;
+  splitHands();
 
-  // keep the hands planted at the bottom so a long unique shaft can recede toward the dock
-  let handsW=Math.max(88, Math.min(150, Math.floor(W*0.46)));
-  let handsH= him ? Math.round(him.height*(handsW/him.width)) : 40;
-  const maxH=Math.max(36, Math.floor(H*0.20));
-  if(handsH>maxH){
-    handsH=maxH;
-    handsW= him ? Math.round(him.width*(handsH/him.height)) : handsW;
+  // plant each arm from the bottom edge, above the HTML dock (uiPad)
+  const maxH=Math.max(32, Math.floor(H*0.26));
+  function place(spr, side){
+    if(!spr) return null;
+    let h=maxH;
+    let w=Math.round(spr.width*(h/spr.height));
+    const maxW=Math.floor(W*0.34);
+    if(w>maxW){ w=maxW; h=Math.round(spr.height*(w/spr.width)); }
+    const x = side==='L' ? 1 : (W-w-1);
+    const y = ground-h+2;
+    return {spr,x,y,w,h};
   }
-  const handsX=Math.floor(W*0.26);
-  const handsY=ground-handsH+2;
+  const L=place(PXART._handL,'L');
+  const R=place(PXART._handR,'R');
 
-  // right-hand grip in the generated pose sits toward the right, mid-sprite
-  const gx=handsX + Math.floor(handsW*0.70);
-  const gy=handsY + Math.floor(handsH*0.48);
-
-  // tip just past the far dock, slightly above the boards so the shaft isn't flush with the planks
-  let tipTarget={x:Math.floor(W*0.54), y:dockY-28};
-  if(pose==='charge'){
-    const p=power||0;
-    tipTarget={x:Math.floor(lerp(W*0.54, W*0.78, p)), y:Math.floor(lerp(dockY-28, ground-32, p))};
-  } else if(pose==='cast'){
-    const p=power||0;
-    tipTarget={x:Math.floor(lerp(W*0.78, W*0.52, p)), y:Math.floor(lerp(ground-32, dockY-22, p))};
-  } else if((pose==='fight'||pose==='idle') && tipOut){
-    tipTarget={x:Math.round(lerp(tipTarget.x, tipOut.x, 0.55)), y:Math.round(lerp(tipTarget.y, tipOut.y, 0.45))};
-    tipTarget.y=Math.max(dockY-36, Math.min(tipTarget.y, ground-28));
+  // right-fist grip in the generated sprite (local ~0.37, 0.38 of the right crop)
+  let gx, gy;
+  if(R){
+    gx=R.x + Math.floor(R.w*0.37);
+    gy=R.y + Math.floor(R.h*0.38);
+  } else {
+    gx=Math.floor(W*0.78); gy=ground-18;
   }
 
-  // keep the visible shaft short enough that it doesn't lie along the whole pier on tall screens
-  const maxLen=Math.floor(H*(H>W*1.15?0.20:0.28));
-  const rdx=tipTarget.x-gx, rdy=tipTarget.y-gy;
-  const rlen=Math.hypot(rdx,rdy)||1;
+  const isTitle=(typeof MODE!=='undefined' && MODE==='title');
+  let tipTarget;
+  if(isTitle){
+    if(H>W*1.15){
+      // tall phone: keep the shaft in the lower-right, well below CAST OFF
+      tipTarget={x:Math.floor(W*0.80), y:Math.floor(H*0.70)};
+    } else {
+      // over the water to the right of the pier, below CAST OFF
+      tipTarget={x:Math.floor(W*0.74), y:Math.min(Math.max(dockY+6, Math.floor(H*0.58)), Math.floor(H*0.62))};
+    }
+  } else {
+    tipTarget={x:Math.floor(W*0.62), y:Math.max(14, dockY-18)};
+  }
+  if(!isTitle){
+    if(pose==='charge'){
+      const p=power||0;
+      tipTarget={x:Math.floor(lerp(W*0.62, W*0.82, p)), y:Math.floor(lerp(dockY-20, ground-36, p))};
+    } else if(pose==='cast'){
+      const p=power||0;
+      tipTarget={x:Math.floor(lerp(W*0.82, W*0.56, p)), y:Math.floor(lerp(ground-36, dockY-18, p))};
+    } else if((pose==='fight'||pose==='idle') && tipOut){
+      tipTarget={x:Math.round(lerp(tipTarget.x, tipOut.x, 0.40)), y:Math.round(lerp(tipTarget.y, tipOut.y, 0.40))};
+      tipTarget.y=Math.max(dockY-36, Math.min(tipTarget.y, ground-28));
+      tipTarget.x=Math.max(tipTarget.x, Math.floor(W*0.52));
+    }
+  }
+
+  // extend slightly past the grip so the unique rod's own butt and reel show in the fist
+  const dx=tipTarget.x-gx, dy=tipTarget.y-gy;
+  const len=Math.hypot(dx,dy)||1;
+  const back=Math.max(10, Math.floor(len*0.16));
+  const gx0=Math.round(gx - dx/len*back);
+  const gy0=Math.round(gy - dy/len*back);
+
+  const maxLen=Math.floor(H*(isTitle?(H>W*1.15?0.26:0.40):(H>W*1.15?0.36:0.46)));
+  let tx=tipTarget.x, ty=tipTarget.y;
+  const rlen=Math.hypot(tx-gx0, ty-gy0)||1;
   if(rlen>maxLen){
-    tipTarget={x:Math.round(gx+rdx/rlen*maxLen), y:Math.round(gy+rdy/rlen*maxLen)};
+    tx=Math.round(gx0+(tx-gx0)/rlen*maxLen);
+    ty=Math.round(gy0+(ty-gy0)/rlen*maxLen);
   }
 
   const rod=(typeof G!=='undefined' && typeof rodByLevel==='function') ? rodByLevel(G.up.rod) : null;
   const rim=rod && PXART.rods[rod.id];
   if(rim){
-    drawRodAlong(g, rim, rod.id, gx, gy, tipTarget.x, tipTarget.y, pose==='fight'?(bend||0):0);
+    drawRodAlong(g, rim, rod.id, gx0, gy0, tx, ty, pose==='fight'?(bend||0):0);
   } else {
     g.strokeStyle='#c4a06a'; g.lineWidth=2;
-    g.beginPath(); g.moveTo(gx,gy); g.lineTo(tipTarget.x, tipTarget.y); g.stroke();
+    g.beginPath(); g.moveTo(gx0,gy0); g.lineTo(tx, ty); g.stroke();
   }
 
-  if(him){
-    g.imageSmoothingEnabled=false;
-    g.drawImage(him, handsX, handsY, handsW, handsH);
-  }
-  return {x:tipTarget.x, y:tipTarget.y};
+  g.imageSmoothingEnabled=false;
+  if(L) g.drawImage(L.spr, L.x, L.y, L.w, L.h);
+  if(R) g.drawImage(R.spr, R.x, R.y, R.w, R.h);
+  return {x:tx, y:ty};
 }

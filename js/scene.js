@@ -137,7 +137,7 @@ function renderScene(state){
   let sunX, sunY, moonX, moonY;
   if(name==='DAWN'){ sunX=Math.floor(W*0.18); sunY=hy-8; }
   else if(name==='DUSK'){ sunX=Math.floor(W*0.82); sunY=hy-10; }
-  else if(name==='DAY'){ sunX=Math.floor(W*0.72); sunY=Math.floor(hy*0.28); }
+  else if(name==='DAY'){ sunX=Math.floor(W*0.72); sunY=Math.max(26, Math.floor(hy*0.32)); }
   else { sunX=Math.floor(W*0.72); sunY=Math.floor(hy*0.32); }
   moonX=Math.floor(W*0.28); moonY=Math.floor(hy*0.30);
   Scene.sun={x:sunX,y:sunY}; Scene.moon={x:moonX,y:moonY};
@@ -163,38 +163,38 @@ function renderScene(state){
     }
   }
 
-  // sun or moon disc (hard bands, no halo)
+  // sun or moon disc, 2.5–3× larger, with a dithered pixel halo. No ticks, wedges, or streaks.
   if(pal.sun && !pal.night){
     const cols = pal.warm? [[255,244,192],[255,220,120],[240,160,60]] : [[255,250,230],[255,240,180],[255,220,100]];
-    const R= name==='DAY'?7:6;
-    for(let y=-R;y<=R;y++) for(let x=-R;x<=R;x++){
-      const d=x*x+y*y; if(d>R*R) continue;
-      const c=d<(R-2)*(R-2)?cols[0]:d<(R-1)*(R-1)?cols[1]:cols[2];
+    const halo = pal.warm? [255,210,120] : [255,236,170];
+    const R= name==='DAY'?19:16;
+    const haloR=R+7;
+    for(let y=-haloR;y<=haloR;y++) for(let x=-haloR;x<=haloR;x++){
+      const d=x*x+y*y;
       const px=sunX+x, py=sunY+y;
-      if(py>=0&&py<hy&&px>=0&&px<W) putBand(img,W,px,py,c);
+      if(py<0||py>=hy||px<0||px>=W) continue;
+      if(d<=R*R){
+        const c=d<(R-4)*(R-4)?cols[0]:d<(R-2)*(R-2)?cols[1]:cols[2];
+        putBand(img,W,px,py,c);
+      } else if(d<=haloR*haloR){
+        const t=Math.sqrt(d)-R;
+        if(BAYER4[py&3][px&3]/16 > (0.28 + t*0.10)) continue;
+        putBand(img,W,px,py,halo);
+      }
     }
   } else if(pal.night || water==='void'){
-    const R=6;
-    for(let y=-R;y<=R;y++) for(let x=-R;x<=R;x++){
-      const d=x*x+y*y; if(d>R*R) continue;
-      // crescent-ish shade on the right
-      const c= x>2? [160,170,200] : d<(R-2)*(R-2)?[240,244,255]:[200,210,230];
+    const R=9;
+    const haloR=R+4;
+    for(let y=-haloR;y<=haloR;y++) for(let x=-haloR;x<=haloR;x++){
+      const d=x*x+y*y;
       const px=moonX+x, py=moonY+y;
-      if(py>=0&&py<hy&&px>=0&&px<W) putBand(img,W,px,py,c);
-    }
-  }
-
-  // short sun ticks only, immediately under the disc — no long diagonal wedges, no vertical shaft in the sky
-  if(pal.sun && !pal.night && water!=='ember'){
-    const rayCol= pal.warm? [255,230,190]: [220,246,255];
-    const maxS=8;
-    for(let k=-1;k<=1;k++){
-      const dirx=k*0.22;
-      for(let s=7;s<7+maxS;s++){
-        const px=(sunX+dirx*s)|0, py=(sunY+s)|0;
-        if(py<0||py>=hy||px<0||px>=W) continue;
-        if(BAYER4[py&3][px&3]/16 > 0.55) continue;
-        putBand(img,W,px,py,rayCol);
+      if(py<0||py>=hy||px<0||px>=W) continue;
+      if(d<=R*R){
+        const c= x>3? [160,170,200] : d<(R-3)*(R-3)?[240,244,255]:[200,210,230];
+        putBand(img,W,px,py,c);
+      } else if(d<=haloR*haloR){
+        if(BAYER4[py&3][px&3]/16 > 0.48) continue;
+        putBand(img,W,px,py,[180,190,220]);
       }
     }
   }

@@ -98,20 +98,26 @@ FISH.forEach((f,i)=>{ f.i=i; FISH_BY[f.id]=f; });
 
 const UPG = {
   rod:  {n:'ROD',  max:12, cost:L=>Math.round(40*Math.pow(2.05,L)),
-         d:L=>`cast x${(0.62+0.035*L).toFixed(2)} · hook ${(0.55+0.06*L).toFixed(2)}s · zone +${L}`},
+         d:L=>`cast x${(0.62+0.035*L).toFixed(2)} · hook ${(0.90+0.06*L).toFixed(2)}s · zone +${L}`},
   line: {n:'LINE', max:8, cost:L=>Math.round(35*Math.pow(2.2,L)),
          d:L=>`tension ${Math.round(48+L*8)} · snap resist +${L}`},
   bait: {n:'BAIT', max:8, cost:L=>Math.round(30*Math.pow(2.25,L)),
-         d:L=>`wait ${Math.max(1.6,(6.5-L*0.6)).toFixed(1)}s · luck +${(0.12*L).toFixed(2)}`},
+         d:L=>`wait ${waitRange(L)[0].toFixed(1)}–${waitRange(L)[1].toFixed(1)}s · luck +${(0.12*L).toFixed(2)}`},
   boat: {n:'BOAT', max:4, cost:L=>[180,900,4000,14000][L],
          d:L=>['tied to the dock','rowboat','skiff','rift hull','ember keel'][L]}
 };
 
 function rodPower(L){ return 0.62 + 0.035*L; }       // max cast distance 0-1
-function hookWin(L){ return 0.55 + 0.06*L; }
+function hookWin(L){ return 0.90 + 0.06*L; }
 function zoneBonus(L){ return L * 0.01; }
 function tenMax(L){ return 48 + L*8; }
-function waitRange(L){ const mid=Math.max(1.6, 6.5-L*0.6); return [mid*0.55, mid*1.45]; }
+function waitRange(L){
+  // starter bites in about 2–6s; better bait tightens the window
+  const lo=Math.max(1.5, 2.0 - L*0.06);
+  const hi=Math.max(lo+1.2, 6.0 - L*0.30);
+  return [lo, hi];
+}
+const FIGHT_SEC=[4.2, 5.2, 7.0, 9.0, 11.5, 13.5];
 function luckFromBait(L){ return 0.12*L; }
 
 function fmt(n){
